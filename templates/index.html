@@ -196,7 +196,14 @@
   {% endif %}
 
   <script>
-    async function fetchSuggestions() {
+    function debounce(fn, delay) {
+      let timeout = null;
+      return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn.apply(this, args), delay);
+      };
+    }
+    async function _fetchSuggestions() {
       const input = document.getElementById("guess");
       const hid    = document.getElementById("guess_id");
       const sug    = document.getElementById("suggestions");
@@ -219,6 +226,7 @@
       }
       sug.hidden = false;
     }
+    const fetchSuggestions = debounce(_fetchSuggestions, 300);
     document.addEventListener('click', e => {
       if (!e.target.closest('#guess')) {
         document.getElementById("suggestions").hidden = true;
