@@ -1,3 +1,4 @@
+from datetime import timedelta
 import os
 import random
 import sys
@@ -5,6 +6,9 @@ import sys
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 
 from data_utils import load_card_database, card_to_tags, compare_tags
+
+from flask_session import Session
+import redis
 
 base_path = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
 template_folder = os.path.join(base_path, "templates")
@@ -15,6 +19,19 @@ target_row = None
 app.secret_key = "你自己的随机 Secret Key"
 
 db = load_card_database()
+
+redis_url = os.getenv("REDIS_URL", None)
+if redis_url:
+    app.config['SESSION_TYPE'] = 'redis'
+    app.config['SESSION_REDIS'] = redis.from_url(redis_url)
+    app.config['SESSION_PERMANENT'] = False
+    app.config['SESSION_USE_SIGNER'] = True
+    app.config['SESSION_KEY_PREFIX'] = 'session:'
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)
+    Session(app)
+    print("✅ Redis session 已启用")
+else:
+    print("⚠️ 未设置 REDIS_URL，使用默认 cookie session")
 
 
 def filter_db(mode):
@@ -50,6 +67,8 @@ def start():
 
         # 3. 初始化 session
         session.clear()
+        if redis_url:
+            session.permanent = True
         session["mode"] = mode
         session["max_attempts"] = max_attempts
         session["guess_count"] = 0
