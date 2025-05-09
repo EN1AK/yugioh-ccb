@@ -75,6 +75,21 @@
     .arrow-cell.cell-green { background: #c8e6c9; }
     .arrow-cell.cell-red   { background: #ffcdd2; }
     .arrow-cell.cell-black { background: #eeeeee; }
+    .preview-tooltip {
+      position: fixed;
+      width: 160px;
+      background: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 0 6px rgba(0,0,0,0.2);
+      padding: 4px;
+      display: none;
+      z-index: 9999;
+    }
+    .preview-tooltip img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
 
 
     .tag {
@@ -164,8 +179,9 @@
     <button type="submit" name="action" value="surrender">投降</button>
     <button type="submit" name="action" value="restart">重新开始</button>
     <ul id="suggestions" hidden></ul>
-  </form>
 
+  </form>
+  <div id="preview" class="preview-tooltip"></div>
   {% if hints %}
     <div class="hint-box">
       {% for h in hints %}
@@ -194,45 +210,126 @@
       </table>
     {% endif %}
   {% endif %}
-
+  <div id="lightbox" style="
+    display:none;
+    position:fixed; top:0; left:0;
+    width:100vw; height:100vh;
+    background:rgba(0,0,0,0.8);
+    justify-content:center;
+    align-items:center;
+    z-index:10000;
+  ">
+    <img id="lightbox-img" src="" style="max-width:90%; max-height:90%; cursor:zoom-out">
+  </div>
   <script>
-    function debounce(fn, delay) {
-      let timeout = null;
-      return function (...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn.apply(this, args), delay);
-      };
+  // 防抖函数
+  function debounce(fn, delay) {
+    let timeout = null;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
+
+  const preview = document.getElementById("preview");
+  const input   = document.getElementById("guess");
+  const hid     = document.getElementById("guess_id");
+  const sug     = document.getElementById("suggestions");
+
+  async function _fetchSuggestions() {
+    const kw = input.value.trim();
+    if (!kw) {
+      hid.value = "";
+      sug.innerHTML = "";
+      sug.hidden = true;
+      return;
     }
-    async function _fetchSuggestions() {
-      const input = document.getElementById("guess");
-      const hid    = document.getElementById("guess_id");
-      const sug    = document.getElementById("suggestions");
-      const kw     = input.value.trim();
-      if (!kw) { hid.value=""; sug.innerHTML=''; sug.hidden=true; return; }
-      const resp = await fetch(`/suggest?q=${encodeURIComponent(kw)}`);
-      const items = await resp.json();
-      sug.innerHTML = '';
-      if (!items.length) { sug.hidden = true; return; }
-      for (const item of items) {
-        const li = document.createElement('li');
-        li.textContent = item.name;
-        li.dataset.id = item.id;
-        li.onclick = () => {
-          input.value = item.name;
-          hid.value   = item.id;
-          sug.hidden  = true;
-        };
-        sug.appendChild(li);
-      }
-      sug.hidden = false;
+    const resp = await fetch(`/suggest?q=${encodeURIComponent(kw)}`);
+    const items= await resp.json();
+
+    sug.innerHTML = "";     // 清空旧项目
+    if (!items.length) {
+      sug.hidden = true;
+      return;
     }
-    const fetchSuggestions = debounce(_fetchSuggestions, 300);
-    document.addEventListener('click', e => {
-      if (!e.target.closest('#guess')) {
-        document.getElementById("suggestions").hidden = true;
-      }
-    });
-  </script>
+
+    // 逐条渲染
+    for (const item of items) {
+      const li = document.createElement("li");
+      li.textContent = item.name;
+      li.dataset.id  = item.id;
+
+      // 鼠标移入列表项：一次性定位预览
+      li.addEventListener("mouseenter", e => {
+        // 直接插入一张 img，并给它加点击弹出大图的逻辑
+        preview.innerHTML = `
+          <img id="preview-img"
+               src="/static/card/${item.id}.jpg"
+               alt="${item.name}"
+               style="width:100%; cursor:zoom-in;">
+        `;
+        // 定位到列表项右侧
+        const r = li.getBoundingClientRect();
+        preview.style.top     = `${r.top + window.scrollY}px`;
+        preview.style.left    = `${r.right + 10 + window.scrollX}px`;
+        preview.style.display = "block";
+
+        // 点击小图时，在 lightbox 中展示大图
+        const previewImg = document.getElementById("preview-img");
+        previewImg.addEventListener("click", () => {
+          const lb    = document.getElementById("lightbox");
+          const lbImg = document.getElementById("lightbox-img");
+          lbImg.src   = previewImg.src;
+          lb.style.display = "flex";
+        });
+      });
+
+      // 鼠标离开列表项，延迟隐藏
+      li.addEventListener("mouseleave", () => setTimeout(hideIfOutside, 50));
+
+      // 预览也绑定同样的保持/隐藏逻辑
+      preview.addEventListener("mouseenter", () => preview.style.display = "block");
+      preview.addEventListener("mouseleave", () => setTimeout(hideIfOutside, 50));
+
+      // 点击选中
+      li.addEventListener("click", () => {
+        input.value = item.name;
+        hid.value   = item.id;
+        sug.hidden  = true;
+        preview.style.display = "none";
+      });
+
+      sug.append(li);
+    }
+
+    // 一定要在渲染完所有 li 之后显示建议框
+    sug.hidden = false;
+  }
+
+  // 当既不在 li 上也不在 preview 上时，隐藏预览框
+  function hideIfOutside() {
+    if (!document.querySelector("#suggestions li:hover") && !preview.matches(":hover")) {
+      preview.style.display = "none";
+    }
+  }
+
+  // 绑定给 input
+  const fetchSuggestions = debounce(_fetchSuggestions, 200);
+  input.addEventListener("input", fetchSuggestions);
+  input.addEventListener("focus", fetchSuggestions);
+
+  // 点击其他地方收起建议框
+  document.addEventListener("click", e => {
+    if (!e.target.closest("#guess")) {
+      sug.hidden = true;
+    }
+  });
+  const lb = document.getElementById("lightbox");
+  lb.addEventListener("click", () => {
+    lb.style.display = "none";
+  });
+</script>
+
 
 </body>
 </html>

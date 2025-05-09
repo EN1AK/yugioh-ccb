@@ -1,18 +1,15 @@
-from datetime import timedelta
 import os
 import random
 import sys
-
+from datetime import timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-
-from data_utils import load_card_database, card_to_tags, compare_tags
-
 from flask_session import Session
 import redis
 
+from data_utils import load_card_database, card_to_tags, compare_tags
+
 base_path = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
 template_folder = os.path.join(base_path, "templates")
-
 app = Flask(__name__, template_folder=template_folder)
 db = None
 target_row = None
@@ -65,10 +62,10 @@ def start():
         except ValueError:
             max_attempts = 5
 
-        # 3. 初始化 session
-        session.clear()
         if redis_url:
             session.permanent = True
+        # 3. 初始化 session
+        session.clear()
         session["mode"] = mode
         session["max_attempts"] = max_attempts
         session["guess_count"] = 0
@@ -151,7 +148,6 @@ def game():
             guess_count = session.get('guess_count', 0) + 1
             session['guess_count'] = guess_count
 
-            user_input = request.form.get("guess", "").strip()
             guess_id = request.form.get("guess_id")
             if guess_id:
                 try:
