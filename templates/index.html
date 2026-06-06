@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>🎴 游戏王CCB</title>
+  <style>
+    .github-link {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+    }
+    .github-link img {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      box-shadow: 0 0 4px rgba(0,0,0,0.3);
+    }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      margin: 2px 4px 2px 0;
+      border-radius: 12px;
+      font-size: 0.9em;
+      font-weight: 500;
+      vertical-align: middle;
+    }
+    .tag-green   { background: #c8e6c9; color: #1b5e20; }
+    .tag-yellow  { background: #fff9c4; color: #665c00; }
+    .tag-gray    { background: #e0e0e0; color: #424242; }
+    .tag-red     { background: #ffcdd2; color: #b71c1c; }
+    body { font-family: sans-serif; margin: 2em; background: #f5f5f5; }
+    input[type="text"] { width: 400px; padding: 10px; font-size: 16px; }
+    ul#suggestions {
+      list-style: none; margin: 0; padding: 0; width: 400px;
+      border: 1px solid #ccc; background: #fff;
+      position: absolute; z-index: 10; max-height: 200px; overflow-y: auto;
+    }
+    ul#suggestions li { padding: 8px; cursor: pointer; }
+    ul#suggestions li:hover { background-color: #f0f0f0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td {
+      border: 1px solid #999; padding: 6px 10px; text-align: center;
+    }
+    .match { background-color: #c8e6c9; }
+    .partial { background-color: #fff9c4; }
+    .mismatch { background-color: #ffcdd2; }
+    button { margin-left: 8px; }
+    .hint-box {
+      margin: 1em 0;
+      padding: 0.5em;
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      border-radius: 4px;
+      color: #856404;
+    }
+    .arrow-grid {
+      display: grid;
+      grid-template-rows: repeat(3, 1.5em);
+      grid-template-columns: repeat(3, 1.5em);
+      gap: 2px;
+    }
+    .arrow-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .arrow-cell.empty {
+      border: none;
+      background: transparent;
+    }
+    .arrow-cell.cell-green { background: #c8e6c9; }
+    .arrow-cell.cell-red   { background: #ffcdd2; }
+    .arrow-cell.cell-black { background: #eeeeee; }
+    .preview-tooltip {
+      position: fixed;
+      width: 160px;
+      background: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 0 6px rgba(0,0,0,0.2);
+      padding: 4px;
+      display: none;
+      z-index: 9999;
+    }
+    .preview-tooltip img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+
+    .tag {
+      display: inline-block;
+      padding: 2px 6px;
+      margin: 1px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .tag-green  { background: #c8e6c9; }
+    .tag-yellow { background: #fff9c4; }
+    .tag-gray   { background: #eee; }
+    .tag-red    { background: #ffcdd2; }
+  </style>
+</head>
+<body>
+  <div class="github-link">
+    <a href="https://github.com/EN1AK/yugioh-ccb" target="_blank" rel="noopener">
+      <img src="https://avatars.githubusercontent.com/EN1AK" alt="GitHub">
+    </a>
+  </div>
+  <h1>🎴 游戏王CCB</h1>
+  <form method="POST" style="margin-bottom:1em;">
+    <label>题库：
+      <select name="mode">
+        <option value="monster" {% if mode =='monster' %}selected{% endif %}>
+          怪兽卡（无通常）
+        </option>
+        <option value="spell"   {% if mode =='spell'   %}selected{% endif %}>
+          魔法卡
+        </option>
+        <option value="trap"    {% if mode =='trap'    %}selected{% endif %}>
+          陷阱卡
+        </option>
+        <option value="hot"     {% if mode =='hot'     %}selected{% endif %}>
+          热门卡
+        </option>
+        <option value="all"     {% if mode =='all'     %}selected{% endif %}>
+          所有卡
+        </option>
+      </select>
+    </label>
+    <button type="submit" name="action" value="change_mode">切换题库</button>
+  </form>
+
+
+  <!-- 历史猜测 -->
+  {% if history %}
+    <h2>历史猜测
+      <small style="font-size:0.8em; color:#666;">
+      （{{ guess_count }} / {{ max_attempts }} ）
+      </small>
+    </h2>
+    <table>
+      <thead>
+        <tr>
+          <th>卡名</th><th>攻击</th><th>守备</th><th>等级/阶级</th><th>刻度</th><th>箭头</th>
+          <th>类型</th><th>属性</th><th>种族</th><th>效果标签</th><th>系列</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in history %}
+        <tr>
+          <td>{{ entry.guess_name }}</td>
+          <td>{{ entry.compare['攻击']|safe }}</td>
+          <td>{{ entry.compare['守备']|safe }}</td>
+          <td>{{ entry.compare['等级/阶级']|safe }}</td>
+          <td>{{ entry.compare['刻度']|safe }}</td>
+          <td>{{ entry.compare['箭头']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['类型']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['属性']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['种族']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['效果标签']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['系列']|safe }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  <!-- 输入与按钮 -->
+  <form method="POST" autocomplete="off" style="position: relative; margin-top: 1em;">
+    <input type="text" id="guess" name="guess" placeholder="输入卡名" oninput="fetchSuggestions()" onfocus="fetchSuggestions()" />
+    <input type="hidden" name="guess_id" id="guess_id" value="">
+    <!-- 三个动作按钮 -->
+    <button type="submit" name="action" value="guess">提交猜测</button>
+    <button type="submit" name="action" value="surrender">投降</button>
+    <button type="submit" name="action" value="restart">重新开始</button>
+    <ul id="suggestions" hidden></ul>
+
+  </form>
+  <div id="preview" class="preview-tooltip"></div>
+  {% if hints %}
+    <div class="hint-box">
+      {% for h in hints %}
+        <p>{{ h }}</p>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- 本次反馈 -->
+  {% if feedback %}
+    {% if feedback.error %}
+      <p style="color:red; font-weight:bold;">{{ feedback.error }}</p>
+    {% elif feedback.success %}
+      <p style="color:green; font-weight:bold;">{{ feedback.success }}</p>
+    {% elif feedback.giveup %}
+      <p style="color:blue; font-weight:bold;">💡 放弃了！正确答案是：{{ feedback.answer }}</p>
+    {% elif feedback.compare %}
+      <h3>你猜的是：<strong>{{ feedback.guess_name }}</strong></h3>
+      <table>
+        <thead><tr><th>属性</th><th>结果</th></tr></thead>
+        <tbody>
+        {% for k,v in feedback.compare.items() %}
+          <tr><td>{{ k }}</td><td>{{ v|safe }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  {% endif %}
+  <div id="lightbox" style="
+    display:none;
+    position:fixed; top:0; left:0;
+    width:100vw; height:100vh;
+    background:rgba(0,0,0,0.8);
+    justify-content:center;
+    align-items:center;
+    z-index:10000;
+  ">
+    <img id="lightbox-img" src="" style="max-width:90%; max-height:90%; cursor:zoom-out">
+  </div>
+  <script>
+  // 防抖函数
+  function debounce(fn, delay) {
+    let timeout = null;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
+
+  const preview = document.getElementById("preview");
+  const input   = document.getElementById("guess");
+  const hid     = document.getElementById("guess_id");
+  const sug     = document.getElementById("suggestions");
+
+  async function _fetchSuggestions() {
+    const kw = input.value.trim();
+    if (!kw) {
+      hid.value = "";
+      sug.innerHTML = "";
+      sug.hidden = true;
+      return;
+    }
+    const resp = await fetch(`/suggest?q=${encodeURIComponent(kw)}`);
+    const items= await resp.json();
+
+    sug.innerHTML = "";     // 清空旧项目
+    if (!items.length) {
+      sug.hidden = true;
+      return;
+    }
+
+    // 逐条渲染
+    for (const item of items) {
+      const li = document.createElement("li");
+      li.textContent = item.name;
+      li.dataset.id  = item.id;
+
+      // 鼠标移入列表项：一次性定位预览
+      li.addEventListener("mouseenter", e => {
+        // 直接插入一张 img，并给它加点击弹出大图的逻辑
+        preview.innerHTML = `
+          <img id="preview-img"
+               src="/static/card/${item.id}.jpg"
+               alt="${item.name}"
+               style="width:100%; cursor:zoom-in;"
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+          <div style="display:none; padding:12px; color:#666; font-size:14px;">
+            图片未下载：${item.id}
+          </div>
+        `;
+        // 定位到列表项右侧
+        const r = li.getBoundingClientRect();
+        preview.style.top     = `${r.top + window.scrollY}px`;
+        preview.style.left    = `${r.right + 10 + window.scrollX}px`;
+        preview.style.display = "block";
+
+        // 点击小图时，在 lightbox 中展示大图
+        const previewImg = document.getElementById("preview-img");
+        previewImg.addEventListener("click", () => {
+          const lb    = document.getElementById("lightbox");
+          const lbImg = document.getElementById("lightbox-img");
+          lbImg.src   = previewImg.src;
+          lb.style.display = "flex";
+        });
+      });
+
+      // 鼠标离开列表项，延迟隐藏
+      li.addEventListener("mouseleave", () => setTimeout(hideIfOutside, 50));
+
+      // 预览也绑定同样的保持/隐藏逻辑
+      preview.addEventListener("mouseenter", () => preview.style.display = "block");
+      preview.addEventListener("mouseleave", () => setTimeout(hideIfOutside, 50));
+
+      // 点击选中
+      li.addEventListener("click", () => {
+        input.value = item.name;
+        hid.value   = item.id;
+        sug.hidden  = true;
+        preview.style.display = "none";
+      });
+
+      sug.append(li);
+    }
+
+    // 一定要在渲染完所有 li 之后显示建议框
+    sug.hidden = false;
+  }
+
+  // 当既不在 li 上也不在 preview 上时，隐藏预览框
+  function hideIfOutside() {
+    if (!document.querySelector("#suggestions li:hover") && !preview.matches(":hover")) {
+      preview.style.display = "none";
+    }
+  }
+
+  // 绑定给 input
+  const fetchSuggestions = debounce(_fetchSuggestions, 200);
+  input.addEventListener("input", fetchSuggestions);
+  input.addEventListener("focus", fetchSuggestions);
+
+  // 点击其他地方收起建议框
+  document.addEventListener("click", e => {
+    if (!e.target.closest("#guess")) {
+      sug.hidden = true;
+    }
+  });
+  const lb = document.getElementById("lightbox");
+  lb.addEventListener("click", () => {
+    lb.style.display = "none";
+  });
+</script>
+
+
+</body>
+</html>

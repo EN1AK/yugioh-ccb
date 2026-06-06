@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>开始新游戏</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    fieldset { margin-bottom: 1em; }
+    .slider-label { display: flex; align-items: center; }
+    .slider-label span { margin-left: 0.5em; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>选择本次游戏的卡片范围</h1>
+  <form method="post" action="/">
+    <fieldset>
+      <legend>卡片类型</legend>
+      <label><input type="radio" name="mode" value="monster" required> 怪兽卡（排除通常怪兽）</label><br>
+      <label><input type="radio" name="mode" value="spell"> 魔法卡</label><br>
+      <label><input type="radio" name="mode" value="trap"> 陷阱卡</label><br>
+      <label><input type="radio" name="mode" value="all"> 全部卡片</label><br>
+      <label><input type="radio" name="mode" value="hot"> 热门怪兽卡</label><br>
+    </fieldset>
+
+    <fieldset>
+      <legend>猜测次数</legend>
+      <div class="slider-label">
+        <label for="attempts">次数：</label>
+        <input
+          type="range"
+          id="attempts"
+          name="attempts"
+          min="5"
+          max="10"
+          value="5"
+          oninput="document.getElementById('attempts-value').innerText = this.value"
+        >
+        <span id="attempts-value">5</span> 次
+      </div>
+      <small>拖动滑块选择本次可以猜测的最大次数（5–10 次）。</small>
+    </fieldset>
+
+    <button type="submit">开始游戏</button>
+  </form>
+</body>
+</html>
