@@ -267,9 +267,8 @@ def suggest():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
-    mode = session.get('mode', 'all')
-    pool = filter_db(mode)
-    # 只取 name 中包含 q 的行，并把 id 和 name 拼成字典列表
+    pool = db
+    # 联想始终使用全卡池，避免当前题库限制导致无法选择其它卡作为猜测。
     df = pool[pool["name"].str.contains(q, case=False, na=False, regex=False)][["name"]].reset_index()
     records = [{"id": int(r["id"]), "name": r["name"]} for _, r in df.iterrows()]
     return jsonify(records)

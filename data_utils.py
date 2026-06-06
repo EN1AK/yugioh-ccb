@@ -1,9 +1,36 @@
 import sqlite3
 import pandas as pd
 import numbers
+import json
 from pathlib import Path
 import sys
 from map import RACE_MAP, TYPE_MAP, CATEGORY_TAGS, TYPE_LINK, LINK_MARKERS, SETNAME_MAP, ATTR_MAP, TYPE_PENDULUM,TYPE_MONSTER
+
+
+def load_system_category_tags() -> dict[int, str]:
+    conf_path = Path(__file__).parent / "strings.conf"
+    if not conf_path.exists():
+        return {}
+
+    tags = {}
+    with conf_path.open("r", encoding="utf-8", errors="ignore") as fp:
+        for line in fp:
+            line = line.strip()
+            if not line.startswith("!system "):
+                continue
+            parts = line.split(maxsplit=2)
+            if len(parts) < 3:
+                continue
+            try:
+                key = int(parts[1])
+            except ValueError:
+                continue
+            if 1100 <= key < 1200:
+                tags[key] = parts[2].strip()
+    return tags
+
+
+CATEGORY_TAGS = {**CATEGORY_TAGS, **load_system_category_tags()}
 
 
 def parse_flags(value, mapping):
@@ -77,10 +104,19 @@ def load_card_database(path: str = None) -> pd.DataFrame:
         "SELECT id, name FROM texts",
         conn, index_col="id"
     )
+    try:
+        meta = pd.read_sql_query(
+            "SELECT id, first_jp_release, jp_packs FROM card_meta",
+            conn, index_col="id"
+        )
+    except sqlite3.OperationalError:
+        meta = pd.DataFrame(columns=["first_jp_release", "jp_packs"])
     conn.close()
 
     # 3. 合并去重并返回
-    df = datas.join(texts, how="inner").reset_index()
+    df = datas.join(texts, how="inner").join(meta, how="left").reset_index()
+    df["first_jp_release"] = df["first_jp_release"].fillna("")
+    df["jp_packs"] = df["jp_packs"].fillna("[]")
     df = (
         df
         .sort_values("id")
@@ -88,6 +124,18 @@ def load_card_database(path: str = None) -> pd.DataFrame:
         .set_index("id")
     )
     return df
+
+
+def parse_json_list(value):
+    if isinstance(value, list):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return parsed if isinstance(parsed, list) else []
 
 
 def card_to_tags(row):
@@ -129,6 +177,8 @@ def card_to_tags(row):
         "种族": race,
         "效果标签": parse_category(row["category"]),
         "系列": parse_setcode(row["setcode"], SETNAME_MAP),
+        "最早发售": row.get("first_jp_release", ""),
+        "收录卡包": parse_json_list(row.get("jp_packs", "[]")),
     }
 
 

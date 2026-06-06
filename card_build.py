@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Update local card database and card images.
-
-Data source:
-  https://ygocdb.com/api/v0/cards.zip
-
-The zip contains cards.json. This script converts it to the ygopro-compatible
-SQLite schema used by the app and downloads card pictures to static/card/.
-"""
+"""Update local card database, extra card metadata, and card images."""
 
 from __future__ import annotations
 
@@ -29,6 +22,9 @@ import requests
 
 CARDS_ZIP_URL = "https://ygocdb.com/api/v0/cards.zip"
 CARDS_ZIP_MD5_URL = "https://ygocdb.com/api/v0/cards.zip.md5"
+CATEGORY_CDB_URL = "https://cdn02.moecube.com:444/ygopro-database/zh-CN/cards.cdb"
+STRINGS_CONF_URL = "https://cdn02.moecube.com:444/ygopro-database/zh-CN/strings.conf"
+CARD_DETAIL_URL = "https://ygocdb.com/api/v0/card/{id}?show=all"
 CARD_IMAGE_URL = "https://cdn.233.momobako.com/ygopro/pics/{id}.jpg"
 HOT_API_URL = "https://sapi.moecube.com:444/ygopro/analytics/single/type"
 HOT_API_PARAMS = {
@@ -42,6 +38,7 @@ ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "cards.cdb"
 MD5_PATH = ROOT / "cards.cdb.md5"
 IMAGE_DIR = ROOT / "static" / "card"
+STRINGS_CONF_PATH = ROOT / "strings.conf"
 
 
 def int_value(value, default=0):
@@ -100,17 +97,43 @@ def parse_cards_json(zip_content: bytes, expected_md5: str | None = None) -> dic
         raise RuntimeError(f"cards.json MD5 校验失败: expected={expected_md5}, actual={actual_md5}")
 
     data = json.loads(json_content)
-
     if not isinstance(data, dict):
         raise RuntimeError("cards.json 顶层结构不是对象")
     return data
 
 
-def fetch_cards_json(url: str = CARDS_ZIP_URL, expected_md5: str | None = None) -> dict:
-    return parse_cards_json(fetch_cards_zip(url), expected_md5)
+def fetch_category_map(url: str = CATEGORY_CDB_URL) -> dict[int, int]:
+    print(f"下载效果标签数据: {url}")
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+
+    fd, tmp_name = tempfile.mkstemp(prefix="category-", suffix=".cdb", dir=str(ROOT))
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        tmp_path.write_bytes(response.content)
+        conn = sqlite3.connect(str(tmp_path))
+        cur = conn.cursor()
+        cur.execute("SELECT id, category FROM datas;")
+        categories = {int(card_id): int(category or 0) for card_id, category in cur.fetchall()}
+        conn.close()
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    return categories
 
 
-def iter_card_rows(cards: dict):
+def fetch_strings_conf(url: str = STRINGS_CONF_URL, path: Path = STRINGS_CONF_PATH):
+    print(f"下载效果标签名称: {url}")
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    tmp_path = path.with_suffix(".conf.tmp")
+    tmp_path.write_bytes(response.content)
+    tmp_path.replace(path)
+
+
+def iter_card_rows(cards: dict, category_map: dict[int, int] | None = None):
+    category_map = category_map or {}
     for card in cards.values():
         if not isinstance(card, dict):
             continue
@@ -133,14 +156,14 @@ def iter_card_rows(cards: dict):
             "level": int_value(data.get("level")),
             "race": int_value(data.get("race")),
             "attribute": int_value(data.get("attribute")),
-            "category": int_value(data.get("category")),
+            "category": category_map.get(card_id, int_value(data.get("category"))),
             "name": pick_name(card),
             "desc": (card.get("text") or {}).get("desc", "") if isinstance(card.get("text"), dict) else "",
         }
 
 
-def create_database(cards: dict, db_path: Path = DB_PATH) -> int:
-    rows = list(iter_card_rows(cards))
+def create_database(cards: dict, db_path: Path = DB_PATH, category_map: dict[int, int] | None = None) -> int:
+    rows = list(iter_card_rows(cards, category_map))
     if not rows:
         raise RuntimeError("没有可写入数据库的卡片数据")
 
@@ -194,6 +217,15 @@ def create_database(cards: dict, db_path: Path = DB_PATH) -> int:
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE card_meta (
+                id INTEGER PRIMARY KEY,
+                first_jp_release TEXT DEFAULT '',
+                jp_packs TEXT DEFAULT '[]'
+            );
+            """
+        )
         cur.executemany(
             """
             INSERT OR REPLACE INTO datas
@@ -213,6 +245,10 @@ def create_database(cards: dict, db_path: Path = DB_PATH) -> int:
             """,
             rows,
         )
+        cur.executemany(
+            "INSERT OR IGNORE INTO card_meta (id, first_jp_release, jp_packs) VALUES (:id, '', '[]');",
+            rows,
+        )
         cur.execute("CREATE INDEX idx_texts_name ON texts(name);")
         conn.commit()
         conn.close()
@@ -223,6 +259,56 @@ def create_database(cards: dict, db_path: Path = DB_PATH) -> int:
         raise
 
     return len(rows)
+
+
+def ensure_card_meta_table(db_path: Path = DB_PATH):
+    conn = sqlite3.connect(str(db_path))
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS card_meta (
+            id INTEGER PRIMARY KEY,
+            first_jp_release TEXT DEFAULT '',
+            jp_packs TEXT DEFAULT '[]'
+        );
+        """
+    )
+    cur.execute(
+        """
+        INSERT OR IGNORE INTO card_meta (id, first_jp_release, jp_packs)
+        SELECT id, '', '[]' FROM datas;
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def load_card_ids_from_db(db_path: Path = DB_PATH) -> list[int]:
+    conn = sqlite3.connect(str(db_path))
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM datas ORDER BY id;")
+    ids = [int(row[0]) for row in cur.fetchall()]
+    conn.close()
+    return ids
+
+
+def load_missing_pack_info_ids(db_path: Path = DB_PATH) -> list[int]:
+    ensure_card_meta_table(db_path)
+    conn = sqlite3.connect(str(db_path))
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT d.id
+          FROM datas d
+          LEFT JOIN card_meta m ON m.id = d.id
+         WHERE m.id IS NULL
+            OR (COALESCE(m.first_jp_release, '') = '' AND COALESCE(m.jp_packs, '[]') = '[]')
+         ORDER BY d.id;
+        """
+    )
+    ids = [int(row[0]) for row in cur.fetchall()]
+    conn.close()
+    return ids
 
 
 def fetch_hot_names() -> set[str]:
@@ -273,13 +359,90 @@ def mark_hot_cards(db_path: Path = DB_PATH) -> int:
     return count
 
 
-def load_card_ids_from_db(db_path: Path = DB_PATH) -> list[int]:
-    conn = sqlite3.connect(str(db_path))
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM datas ORDER BY id;")
-    ids = [int(row[0]) for row in cur.fetchall()]
-    conn.close()
-    return ids
+def normalize_jp_packs(payload: dict) -> tuple[str, list[str]]:
+    packs = payload.get("jppacks") if isinstance(payload, dict) else None
+    if not isinstance(packs, list):
+        return "", []
+
+    normalized = []
+    for pack in packs:
+        if not isinstance(pack, dict):
+            continue
+        name = str(pack.get("name") or "").strip()
+        setid = str(pack.get("setid") or "").strip()
+        date = str(pack.get("date") or "").strip()
+        if not name and not setid:
+            continue
+        label = f"{name} ({setid})" if setid else name
+        normalized.append({"date": date, "label": label})
+
+    normalized.sort(key=lambda item: item["date"] or "9999-99-99")
+    first_date = next((item["date"] for item in normalized if item["date"]), "")
+
+    seen = set()
+    labels = []
+    for item in normalized:
+        label = item["label"]
+        if label in seen:
+            continue
+        seen.add(label)
+        labels.append(label)
+    return first_date, labels
+
+
+def fetch_one_pack_info(session: requests.Session, card_id: int, timeout: int) -> tuple[int, str, list[str]]:
+    url = CARD_DETAIL_URL.format(id=card_id)
+    response = session.get(url, timeout=timeout)
+    response.raise_for_status()
+    return (card_id, *normalize_jp_packs(response.json()))
+
+
+def update_pack_info(db_path: Path, card_ids: list[int], workers: int = 8, timeout: int = 20) -> dict:
+    ensure_card_meta_table(db_path)
+    stats = {"updated": 0, "failed": 0}
+    total = len(card_ids)
+    started = time.time()
+
+    def task(card_id: int):
+        with requests.Session() as session:
+            return fetch_one_pack_info(session, card_id, timeout)
+
+    rows = []
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(task, card_id) for card_id in card_ids]
+        for index, future in enumerate(as_completed(futures), start=1):
+            try:
+                card_id, first_date, labels = future.result()
+                rows.append((card_id, first_date, json.dumps(labels, ensure_ascii=False)))
+                stats["updated"] += 1
+            except Exception:
+                stats["failed"] += 1
+
+            if index % 200 == 0 or index == total:
+                elapsed = max(time.time() - started, 0.1)
+                print(
+                    f"卡包信息进度 {index}/{total}, "
+                    f"更新 {stats['updated']}, 失败 {stats['failed']}, "
+                    f"{index / elapsed:.1f}/s"
+                )
+
+    if rows:
+        conn = sqlite3.connect(str(db_path))
+        cur = conn.cursor()
+        cur.executemany(
+            """
+            INSERT INTO card_meta (id, first_jp_release, jp_packs)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                first_jp_release = excluded.first_jp_release,
+                jp_packs = excluded.jp_packs;
+            """,
+            rows,
+        )
+        conn.commit()
+        conn.close()
+
+    return stats
 
 
 def download_one_image(session: requests.Session, card_id: int, image_dir: Path, timeout: int) -> str:
@@ -333,12 +496,16 @@ def download_images(card_ids: list[int], image_dir: Path = IMAGE_DIR, workers: i
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Update cards.cdb and local card images.")
+    parser = argparse.ArgumentParser(description="Update cards.cdb, pack metadata, and local card images.")
     parser.add_argument("--db", default=str(DB_PATH), help="output cards.cdb path")
     parser.add_argument("--image-dir", default=str(IMAGE_DIR), help="directory for card images")
-    parser.add_argument("--skip-images", action="store_true", help="do not download card images")
     parser.add_argument("--skip-hot", action="store_true", help="do not update hot marker")
+    parser.add_argument("--skip-category", action="store_true", help="do not download legacy cards.cdb for category tags")
+    parser.add_argument("--skip-pack-info", action="store_true", help="do not fetch jppacks metadata")
+    parser.add_argument("--skip-images", action="store_true", help="do not download card images")
+    parser.add_argument("--pack-limit", type=int, default=0, help="fetch pack info for first N missing cards")
     parser.add_argument("--image-limit", type=int, default=0, help="download only first N images for testing")
+    parser.add_argument("--pack-workers", type=int, default=8, help="parallel pack-info workers")
     parser.add_argument("--workers", type=int, default=12, help="parallel image download workers")
     parser.add_argument("--force", action="store_true", help="ignore saved MD5 and rebuild database")
     return parser.parse_args()
@@ -357,16 +524,41 @@ def main():
 
     if db_current:
         print(f"卡片数据未变化: {remote_md5}")
+        ensure_card_meta_table(db_path)
+        if not args.skip_category and not STRINGS_CONF_PATH.exists():
+            try:
+                fetch_strings_conf()
+            except Exception as exc:
+                print(f"效果标签名称更新失败，使用内置标签名: {exc}", file=sys.stderr)
     else:
         zip_content = fetch_cards_zip()
         cards = parse_cards_json(zip_content, remote_md5)
-        count = create_database(cards, db_path)
+        category_map = {}
+        if not args.skip_category:
+            try:
+                category_map = fetch_category_map()
+                fetch_strings_conf()
+                print(f"效果标签数据: {len(category_map)} 张")
+            except Exception as exc:
+                print(f"效果标签数据更新失败，category 将使用 0: {exc}", file=sys.stderr)
+        count = create_database(cards, db_path, category_map)
         write_local_md5(remote_md5, md5_path)
         print(f"写入数据库: {db_path} ({count} 张卡), MD5={remote_md5}")
 
     if not args.skip_hot:
         hot_count = mark_hot_cards(db_path)
         print(f"热门卡标记: {hot_count} 张")
+
+    if not args.skip_pack_info:
+        pack_ids = load_missing_pack_info_ids(db_path)
+        if args.pack_limit > 0:
+            pack_ids = pack_ids[: args.pack_limit]
+        if pack_ids:
+            print(f"开始更新日文收录卡包信息: {len(pack_ids)} 张")
+            stats = update_pack_info(db_path, pack_ids, max(args.pack_workers, 1))
+            print(f"卡包信息完成: {stats}")
+        else:
+            print("日文收录卡包信息已是最新")
 
     if args.skip_images:
         print("跳过卡图下载")

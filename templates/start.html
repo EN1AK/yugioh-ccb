@@ -2,45 +2,280 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>开始新游戏</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    fieldset { margin-bottom: 1em; }
-    .slider-label { display: flex; align-items: center; }
-    .slider-label span { margin-left: 0.5em; font-weight: bold; }
+    :root {
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --ink: #182033;
+      --muted: #687083;
+      --line: #e4e7ef;
+      --primary: #1f2a44;
+      --accent: #d6a84f;
+      --accent-soft: #fff4d6;
+      --shadow: 0 18px 50px rgba(25, 36, 67, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Inter", "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 10%, rgba(214, 168, 79, 0.22), transparent 28%),
+        linear-gradient(180deg, #111827 0%, #1f2a44 260px, var(--bg) 260px, var(--bg) 100%);
+    }
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 24px;
+      color: #fff;
+      padding: 8px 0 16px;
+    }
+    .eyebrow {
+      color: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 6vw, 56px);
+      line-height: 1;
+    }
+    .hero p {
+      margin: 12px 0 0;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 16px;
+    }
+    .shell {
+      background: rgba(255,255,255,0.9);
+      border: 1px solid rgba(255,255,255,0.7);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      padding: 28px;
+      backdrop-filter: blur(12px);
+    }
+    .section-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .section-title h2 {
+      margin: 0;
+      font-size: 22px;
+    }
+    .section-title span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .mode-card {
+      position: relative;
+      display: block;
+      cursor: pointer;
+    }
+    .mode-card input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .mode-body {
+      display: block;
+      min-height: 132px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px 18px 16px;
+      background: var(--panel);
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+      overflow: hidden;
+    }
+    .mode-card:hover .mode-body {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(31, 42, 68, 0.12);
+    }
+    .mode-card input:checked + .mode-body {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+    .mode-name {
+      display: block;
+      font-weight: 800;
+      font-size: 17px;
+      margin-bottom: 10px;
+      white-space: normal;
+    }
+    .mode-desc {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: normal;
+    }
+    .settings {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 22px;
+      align-items: center;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: #fbfcff;
+    }
+    .slider-row {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: center;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .attempt-badge {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      min-width: 88px;
+      justify-content: center;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 800;
+    }
+    .attempt-badge strong {
+      color: var(--accent);
+      font-size: 26px;
+      line-height: 1;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 24px;
+    }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 14px 28px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 12px 24px rgba(31, 42, 68, 0.22);
+    }
+    button:hover { background: #283858; }
+    @media (max-width: 900px) {
+      .mode-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .page { width: min(100% - 20px, 1080px); padding: 24px 0; }
+      .shell { padding: 18px; border-radius: 22px; }
+      .mode-grid { grid-template-columns: 1fr; }
+      .settings { grid-template-columns: 1fr; }
+      .slider-row { grid-template-columns: 1fr; }
+      .actions button { width: 100%; }
+    }
   </style>
 </head>
 <body>
-  <h1>选择本次游戏的卡片范围</h1>
-  <form method="post" action="/">
-    <fieldset>
-      <legend>卡片类型</legend>
-      <label><input type="radio" name="mode" value="monster" required> 怪兽卡（排除通常怪兽）</label><br>
-      <label><input type="radio" name="mode" value="spell"> 魔法卡</label><br>
-      <label><input type="radio" name="mode" value="trap"> 陷阱卡</label><br>
-      <label><input type="radio" name="mode" value="all"> 全部卡片</label><br>
-      <label><input type="radio" name="mode" value="hot"> 热门怪兽卡</label><br>
-    </fieldset>
-
-    <fieldset>
-      <legend>猜测次数</legend>
-      <div class="slider-label">
-        <label for="attempts">次数：</label>
-        <input
-          type="range"
-          id="attempts"
-          name="attempts"
-          min="5"
-          max="10"
-          value="5"
-          oninput="document.getElementById('attempts-value').innerText = this.value"
-        >
-        <span id="attempts-value">5</span> 次
+  <main class="page">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">Yu-Gi-Oh Card Guess</div>
+        <h1>游戏王 CCB</h1>
+        <p>选择题库和猜测次数，开始一局新的猜卡挑战。</p>
       </div>
-      <small>拖动滑块选择本次可以猜测的最大次数（5–10 次）。</small>
-    </fieldset>
+    </header>
 
-    <button type="submit">开始游戏</button>
-  </form>
+    <form class="shell" method="post" action="/">
+      <div class="section-title">
+        <h2>选择题库</h2>
+        <span>联想输入会覆盖全部卡片，题库只影响答案范围</span>
+      </div>
+
+      <div class="mode-grid">
+        <label class="mode-card">
+          <input type="radio" name="mode" value="hot" checked required>
+          <span class="mode-body">
+            <span class="mode-name">热门怪兽卡</span>
+            <span class="mode-desc">推荐模式。只包含热门的非通常怪兽。</span>
+          </span>
+        </label>
+        <label class="mode-card">
+          <input type="radio" name="mode" value="monster">
+          <span class="mode-body">
+            <span class="mode-name">怪兽卡</span>
+            <span class="mode-desc">排除通常怪兽，范围更适合属性对比。</span>
+          </span>
+        </label>
+        <label class="mode-card">
+          <input type="radio" name="mode" value="spell">
+          <span class="mode-body">
+            <span class="mode-name">魔法卡</span>
+            <span class="mode-desc">只从魔法卡中抽取答案。</span>
+          </span>
+        </label>
+        <label class="mode-card">
+          <input type="radio" name="mode" value="trap">
+          <span class="mode-body">
+            <span class="mode-name">陷阱卡</span>
+            <span class="mode-desc">只从陷阱卡中抽取答案。</span>
+          </span>
+        </label>
+        <label class="mode-card">
+          <input type="radio" name="mode" value="all">
+          <span class="mode-body">
+            <span class="mode-name">全部卡片</span>
+            <span class="mode-desc">最高难度，所有卡都可能成为答案。</span>
+          </span>
+        </label>
+      </div>
+
+      <div class="settings">
+        <div>
+          <div class="section-title" style="margin-bottom: 10px;">
+            <h2>猜测次数</h2>
+            <span>5 到 10 次</span>
+          </div>
+          <div class="slider-row">
+            <label for="attempts">最大次数</label>
+            <input
+              type="range"
+              id="attempts"
+              name="attempts"
+              min="5"
+              max="10"
+              value="5"
+              oninput="document.getElementById('attempts-value').innerText = this.value"
+            >
+          </div>
+        </div>
+        <div class="attempt-badge"><strong id="attempts-value">5</strong> 次</div>
+      </div>
+
+      <div class="actions">
+        <button type="submit">开始游戏</button>
+      </div>
+    </form>
+  </main>
 </body>
 </html>
