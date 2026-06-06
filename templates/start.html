@@ -57,6 +57,18 @@
       color: rgba(255, 255, 255, 0.78);
       font-size: 16px;
     }
+    .github-link img {
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.25), 0 12px 26px rgba(0,0,0,0.22);
+    }
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
     .shell {
       background: rgba(255,255,255,0.9);
       border: 1px solid rgba(255,255,255,0.7);
@@ -165,6 +177,26 @@
       font-size: 26px;
       line-height: 1;
     }
+    .join-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      align-items: center;
+      margin-top: 14px;
+    }
+    .text-input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      font-size: 15px;
+      outline: none;
+    }
+    .text-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
     .actions {
       display: flex;
       justify-content: flex-end;
@@ -182,6 +214,62 @@
       box-shadow: 0 12px 24px rgba(31, 42, 68, 0.22);
     }
     button:hover { background: #283858; }
+    .help-button {
+      min-height: 44px;
+      padding: 0 18px;
+      background: rgba(255,255,255,0.14);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.18);
+    }
+    .help-button:hover {
+      background: rgba(255,255,255,0.22);
+    }
+    .help-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10001;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(8,13,24,0.68);
+    }
+    .help-modal.open { display: flex; }
+    .help-panel {
+      width: min(760px, 100%);
+      max-height: min(86vh, 760px);
+      overflow: auto;
+      padding: 24px;
+      border-radius: 24px;
+      background: #fff;
+      box-shadow: 0 28px 90px rgba(0,0,0,0.32);
+    }
+    .help-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .help-panel h2, .help-panel h3 { margin: 0; }
+    .help-panel h3 { margin-top: 18px; }
+    .help-panel p, .help-panel li {
+      color: var(--muted);
+      line-height: 1.65;
+    }
+    .help-panel ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+    .help-tag {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-weight: 800;
+    }
+    .help-green { background: #dcfce7; color: #166534; }
+    .help-yellow { background: #fef9c3; color: #854d0e; }
+    .help-red { background: #fee2e2; color: #991b1b; }
+    .help-gray { background: #edf0f5; color: #4b5563; }
     @media (max-width: 900px) {
       .mode-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .hero { grid-template-columns: 1fr; }
@@ -191,6 +279,7 @@
       .shell { padding: 18px; border-radius: 22px; }
       .mode-grid { grid-template-columns: 1fr; }
       .settings { grid-template-columns: 1fr; }
+      .join-grid { grid-template-columns: 1fr; }
       .slider-row { grid-template-columns: 1fr; }
       .actions button { width: 100%; }
     }
@@ -201,8 +290,14 @@
     <header class="hero">
       <div>
         <div class="eyebrow">Yu-Gi-Oh Card Guess</div>
-        <h1>游戏王 CCB</h1>
+        <h1>游戏王 猜猜呗</h1>
         <p>选择题库和猜测次数，开始一局新的猜卡挑战。</p>
+      </div>
+      <div class="hero-actions">
+        <button class="help-button" type="button" onclick="openHelp()">帮助</button>
+        <a class="github-link" href="https://github.com/EN1AK/yugioh-ccb" target="_blank" rel="noopener">
+          <img src="https://avatars.githubusercontent.com/EN1AK" alt="GitHub">
+        </a>
       </div>
     </header>
 
@@ -224,7 +319,7 @@
           <input type="radio" name="mode" value="monster">
           <span class="mode-body">
             <span class="mode-name">怪兽卡</span>
-            <span class="mode-desc">排除通常怪兽，范围更适合属性对比。</span>
+            <span class="mode-desc">排除通常怪兽。</span>
           </span>
         </label>
         <label class="mode-card">
@@ -276,6 +371,96 @@
         <button type="submit">开始游戏</button>
       </div>
     </form>
+
+    <form class="shell" method="post" action="/multiplayer/create" style="margin-top: 18px;">
+      <div class="section-title">
+        <h2>多人模式</h2>
+        <span>最多 4 人，同一答案，房主可设置限时</span>
+      </div>
+      <div class="settings">
+        <div>
+          <div class="slider-row">
+            <label for="multi-name">昵称</label>
+            <input class="text-input" id="multi-name" name="name" type="text" maxlength="20" placeholder="输入你的昵称">
+          </div>
+          <div class="slider-row" style="margin-top: 12px;">
+            <label for="multi-mode">题库</label>
+            <select id="multi-mode" name="mode" style="width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:14px; background:#fff;">
+              <option value="hot">热门怪兽卡</option>
+              <option value="monster">怪兽卡（无通常）</option>
+              <option value="spell">魔法卡</option>
+              <option value="trap">陷阱卡</option>
+              <option value="all">全部卡片</option>
+            </select>
+          </div>
+          <div class="slider-row" style="margin-top: 12px;">
+            <label for="multi-duration">限时</label>
+            <select id="multi-duration" name="duration" style="width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:14px; background:#fff;">
+              <option value="3">3 分钟</option>
+              <option value="5" selected>5 分钟</option>
+              <option value="10">10 分钟</option>
+              <option value="15">15 分钟</option>
+              <option value="30">30 分钟</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="submit">创建多人房间</button>
+      </div>
+    </form>
+
+    <form class="shell" method="post" action="/multiplayer/join" style="margin-top: 18px;">
+      <div class="section-title">
+        <h2>加入房间</h2>
+        <span>输入房间号进入已有多人房间</span>
+      </div>
+      <div class="join-grid">
+        <input class="text-input" name="room_id" type="text" maxlength="12" placeholder="房间号，例如 1EC54B" required oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')">
+        <input class="text-input" name="name" type="text" maxlength="20" placeholder="昵称（可选）">
+        <button type="submit">加入房间</button>
+      </div>
+    </form>
   </main>
+
+  <div id="help-modal" class="help-modal" onclick="closeHelp(event)">
+    <section class="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="help-head">
+        <h2 id="help-title">游戏帮助</h2>
+        <button type="button" onclick="closeHelp()">关闭</button>
+      </div>
+      <h3>单人模式</h3>
+      <ul>
+        <li>选择题库和最大猜测次数后开始游戏。</li>
+        <li>输入卡名并从联想列表选择卡片，提交后会看到和答案的属性对比。</li>
+        <li>每题每答错 3 次会解锁 1 次提示按钮，点击后提示目标卡的一个正确效果标签。</li>
+      </ul>
+      <h3>多人模式</h3>
+      <ul>
+        <li>创建房间后分享房间号或链接，其他玩家可输入房间号加入。</li>
+        <li>玩家先准备，房主开始后所有人猜同一张卡。</li>
+        <li>按猜中顺序得分；本题放弃后等其他人，全部完成后显示答案并进入下一题。</li>
+      </ul>
+      <h3>颜色含义</h3>
+      <ul>
+        <li><span class="help-tag help-green">绿色</span> 完全正确。</li>
+        <li><span class="help-tag help-yellow">黄色</span> 数值在+-500/2范围内。</li>
+        <li><span class="help-tag help-red">红色</span> 不匹配。</li>
+        <li><span class="help-tag help-gray">灰色</span> 空值、不可比较或无信息。</li>
+      </ul>
+    </section>
+  </div>
+  <script>
+  function openHelp() {
+    document.getElementById("help-modal").classList.add("open");
+  }
+  function closeHelp(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById("help-modal").classList.remove("open");
+  }
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeHelp();
+  });
+  </script>
 </body>
 </html>
