@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>多人模式 - 游戏王 CCB</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --ink: #182033;
+      --muted: #687083;
+      --line: #e4e7ef;
+      --primary: #1f2a44;
+      --accent: #d6a84f;
+      --accent-soft: #fff4d6;
+      --green-bg: #dcfce7;
+      --green-text: #166534;
+      --gray-bg: #edf0f5;
+      --gray-text: #4b5563;
+      --red-bg: #fee2e2;
+      --red-text: #991b1b;
+      --shadow: 0 18px 44px rgba(25, 36, 67, 0.10);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 8%, rgba(214, 168, 79, 0.16), transparent 26%),
+        radial-gradient(circle at 90% 0%, rgba(31, 42, 68, 0.16), transparent 24%),
+        var(--bg);
+    }
+    .page {
+      width: min(1320px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: center;
+      padding: 22px 24px;
+      border-radius: 26px;
+      background: linear-gradient(135deg, #111827, var(--primary));
+      color: #fff;
+      box-shadow: var(--shadow);
+    }
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: clamp(28px, 5vw, 44px); line-height: 1; }
+    .subtitle { margin: 8px 0 0; color: rgba(255,255,255,0.72); }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .card { padding: 20px; }
+    .room-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .pill {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      font-weight: 800;
+    }
+    .pill strong { color: var(--accent); }
+    .copy-link {
+      color: #fff;
+      word-break: break-all;
+      opacity: .86;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    form.join-form, form.guess-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      margin-top: 16px;
+      position: relative;
+    }
+    .control-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 14px;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      outline: none;
+      font-size: 16px;
+      background: #fff;
+    }
+    input[type="text"]:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+    button, .link-button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    button.secondary { background: var(--gray-text); }
+    button.ready { background: #166534; }
+    button.danger { background: #991b1b; }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+    .link-button { display: inline-flex; margin-top: 14px; }
+    .top-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .notice {
+      padding: 14px 16px;
+      border-radius: 18px;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      background: var(--accent-soft);
+      color: #72531a;
+      font-weight: 700;
+    }
+    .error { background: #fff1f2; border-color: #fecaca; color: var(--red-text); }
+    .success { background: #f0fdf4; border-color: #86efac; color: var(--green-text); }
+    .meta-note { color: var(--muted); margin-top: 10px; line-height: 1.6; }
+    .score-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .score-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fbfcff;
+    }
+    .player-name {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      font-weight: 800;
+    }
+    .rank {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background: var(--gray-bg);
+      color: var(--gray-text);
+      font-weight: 900;
+    }
+    .rank.done { background: var(--green-bg); color: var(--green-text); }
+    .score {
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--primary);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+      background: var(--gray-bg);
+      color: var(--gray-text);
+    }
+    .badge.owner { background: var(--accent-soft); color: #854d0e; }
+    .badge.ready { background: var(--green-bg); color: var(--green-text); }
+    .badge.wait { background: #fff1f2; color: var(--red-text); }
+    ul#suggestions {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 40;
+      width: min(560px, 100%);
+      max-height: 280px;
+      overflow-y: auto;
+      list-style: none;
+      margin: 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 16px 40px rgba(25, 36, 67, 0.16);
+    }
+    ul#suggestions li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    ul#suggestions li:hover { background: var(--accent-soft); }
+    .suggest-id { color: var(--muted); font-size: 12px; }
+    .preview-tooltip {
+      position: fixed;
+      display: none;
+      z-index: 9999;
+      width: 180px;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 18px 42px rgba(25, 36, 67, 0.22);
+    }
+    .preview-tooltip img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 14px;
+    }
+    .table-wrap {
+      margin-top: 14px;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+    }
+    table {
+      width: 100%;
+      min-width: 920px;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      text-align: center;
+      vertical-align: top;
+    }
+    th {
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    td:first-child, th:first-child {
+      position: sticky;
+      left: 0;
+      background: #fff;
+      text-align: left;
+      font-weight: 800;
+      box-shadow: 8px 0 16px rgba(25,36,67,0.06);
+    }
+    th:first-child { background: #f8fafc; }
+    .tag {
+      display: inline-block;
+      padding: 3px 8px;
+      margin: 2px;
+      border-radius: 999px;
+      font-size: 0.88em;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+    .tag-green { background: var(--green-bg); color: var(--green-text); }
+    .tag-yellow { background: #fef9c3; color: #854d0e; }
+    .tag-gray { background: var(--gray-bg); color: var(--gray-text); }
+    .tag-red { background: var(--red-bg); color: var(--red-text); }
+    .events {
+      margin-top: 14px;
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    #lightbox {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.72);
+      z-index: 10000;
+      padding: 20px;
+    }
+    #lightbox-img {
+      max-width: min(92vw, 620px);
+      max-height: 92vh;
+      border-radius: 18px;
+      cursor: zoom-out;
+      box-shadow: 0 24px 80px rgba(0,0,0,.45);
+    }
+    .help-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10001;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(8,13,24,0.68);
+    }
+    .help-modal.open { display: flex; }
+    .help-panel {
+      width: min(760px, 100%);
+      max-height: min(86vh, 760px);
+      overflow: auto;
+      padding: 24px;
+      border-radius: 24px;
+      background: #fff;
+      box-shadow: 0 28px 90px rgba(0,0,0,0.32);
+    }
+    .help-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .help-panel h2, .help-panel h3 { margin: 0; }
+    .help-panel h3 { margin-top: 18px; }
+    .help-panel p, .help-panel li {
+      color: var(--muted);
+      line-height: 1.65;
+    }
+    .help-panel ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      form.join-form, form.guess-form { grid-template-columns: 1fr; }
+      button { width: 100%; }
+    }
+  </style>
+</head>
+<body data-status="{{ room.status if room else '' }}">
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <h1>多人模式</h1>
+        <p class="subtitle">玩家加入后先准备，房主设置时长并开始游戏；最多 4 人猜同一张卡，按猜中顺序获得 4 / 3 / 2 / 1 分。</p>
+        {% if room %}
+          <div class="room-meta">
+            <span class="pill">房间 <strong>{{ room.id }}</strong></span>
+            <span class="pill">状态 <strong id="room-status">{% if room.status == 'waiting' %}等待中{% elif room.status == 'playing' %}进行中{% elif room.status == 'revealing' %}揭晓中{% else %}已结束{% endif %}</strong></span>
+            <span class="pill">{% if room.status == 'waiting' %}时长{% elif room.status == 'revealing' %}下一题{% else %}剩余{% endif %} <strong id="countdown">{% if room.status == 'revealing' %}{{ next_round_in }}{% else %}{{ remaining }}{% endif %}</strong> 秒</span>
+            <span class="pill">人数 <strong id="player-count">{{ room.players|length }}</strong> / {{ max_players }}</span>
+            <span class="pill">准备 <strong id="ready-count">{{ ready_count }}</strong> / {{ room.players|length }}</span>
+          </div>
+          <div class="copy-link">分享链接：{{ request.url }}</div>
+        {% endif %}
+      </div>
+      <div class="top-actions">
+        <button class="link-button" type="button" onclick="openHelp()">帮助</button>
+        <a class="link-button" href="{{ url_for('start') }}">返回首页</a>
+      </div>
+    </header>
+
+    {% if not room %}
+      <section class="panel card">
+        <h2>无法进入房间</h2>
+        <div class="notice error">{{ error }}</div>
+      </section>
+    {% else %}
+      <div class="layout">
+        <section class="panel card">
+          {% if error %}
+            <div class="notice error">{{ error }}</div>
+          {% endif %}
+
+          {% if not player %}
+            <h2>加入房间</h2>
+            {% if room.status == 'waiting' %}
+              <form class="join-form" method="POST">
+                <input type="text" name="name" placeholder="输入你的昵称" maxlength="20" required>
+                <button type="submit" name="action" value="join">加入</button>
+              </form>
+            {% else %}
+              <div class="notice error">游戏已经开始，无法加入本局。</div>
+            {% endif %}
+          {% else %}
+            {% if room.status == 'waiting' %}
+              <h2>{{ player.name }}，等待开始</h2>
+              <div class="notice">当前处于准备阶段。非房主玩家全部准备后，房主可以开始游戏。</div>
+              <form class="control-row" method="POST">
+                <button class="{% if player.ready %}secondary{% else %}ready{% endif %}" type="submit" name="action" value="ready">
+                  {% if player.ready %}取消准备{% else %}准备{% endif %}
+                </button>
+              </form>
+
+              {% if player.is_owner %}
+                <form class="control-row" method="POST">
+                  <select name="duration" aria-label="房间限时" style="max-width: 180px;">
+                    {% for minutes in [3, 5, 10, 15, 30] %}
+                      <option value="{{ minutes }}" {% if room.duration == minutes * 60 %}selected{% endif %}>{{ minutes }} 分钟</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" name="action" value="start" {% if not can_start %}disabled title="还有玩家未准备"{% endif %}>开始游戏</button>
+                </form>
+                <p class="meta-note">房主可以调整本局限时。单人房可直接开始；多人房需要其他玩家先准备。</p>
+              {% else %}
+                <p class="meta-note">准备后等待房主开始。房主开始前仍可取消准备。</p>
+              {% endif %}
+            {% elif room.status == 'playing' %}
+              <h2>{{ player.name }}，开始猜卡</h2>
+              {% if player.rank %}
+                <div class="notice success">你已第 {{ player.rank }} 名猜中，等待其他玩家。</div>
+              {% elif player.surrendered %}
+                <div class="notice">你已放弃本题，等待本题结束。</div>
+              {% else %}
+                <form class="guess-form" method="POST" autocomplete="off">
+                  <input type="text" id="guess" name="guess" placeholder="输入卡名，联想搜索全部卡片" oninput="fetchSuggestions()" onfocus="fetchSuggestions()">
+                  <input type="hidden" name="guess_id" id="guess_id" value="">
+                  <button type="submit" name="action" value="guess">提交猜测</button>
+                  <button class="danger" type="submit" name="action" value="surrender">放弃本题</button>
+                  <ul id="suggestions" hidden></ul>
+                </form>
+                <div id="preview" class="preview-tooltip"></div>
+              {% endif %}
+            {% elif room.status == 'revealing' %}
+              <h2>{{ player.name }}，本题揭晓</h2>
+              <div class="notice success">答案是：{{ answer }}。{{ next_round_in }} 秒后自动进入下一题，本题放弃不计分。</div>
+            {% endif %}
+
+            {% if feedback %}
+              {% if feedback.error %}
+                <div class="notice error">{{ feedback.error }}</div>
+              {% elif feedback.success %}
+                <div class="notice success">{{ feedback.success }}</div>
+              {% endif %}
+            {% endif %}
+
+            {% if history %}
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>卡名</th><th>攻击</th><th>守备</th><th>等级/阶级</th><th>刻度</th><th>箭头</th>
+                      <th>类型</th><th>属性</th><th>种族</th><th>效果标签</th><th>系列</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for entry in history %}
+                    <tr>
+                      <td>{{ entry.guess_name }}</td>
+                      <td>{{ entry.compare['攻击']|safe }}</td>
+                      <td>{{ entry.compare['守备']|safe }}</td>
+                      <td>{{ entry.compare['等级/阶级']|safe }}</td>
+                      <td>{{ entry.compare['刻度']|safe }}</td>
+                      <td>{{ entry.compare['箭头']|safe }}</td>
+                      <td>{{ entry.compare['类型']|safe }}</td>
+                      <td>{{ entry.compare['属性']|safe }}</td>
+                      <td>{{ entry.compare['种族']|safe }}</td>
+                      <td>{{ entry.compare['效果标签']|safe }}</td>
+                      <td>{{ entry.compare['系列']|safe }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+          {% endif %}
+        </section>
+
+        <aside class="panel card">
+          <h2>排行榜</h2>
+          <div class="score-list" id="score-list">
+            {% for p in scoreboard %}
+              <div class="score-row">
+                <span class="rank {% if p.rank %}done{% endif %}">{% if p.rank %}{{ p.rank }}{% else %}-{% endif %}</span>
+                <span class="player-name">
+                  {{ p.name }}
+                  {% if p.is_owner %}<span class="badge owner">房主</span>{% endif %}
+                  {% if room.status == 'waiting' %}
+                    {% if p.ready %}<span class="badge ready">已准备</span>{% else %}<span class="badge wait">未准备</span>{% endif %}
+                  {% elif p.surrendered %}
+                    <span class="badge wait">已放弃</span>
+                  {% endif %}
+                </span>
+                <span class="score">{{ p.score }}</span>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="events" id="events">
+            {% for event in room.events[-8:] %}
+              <div>{{ event.name }}：{{ event.message }}</div>
+            {% endfor %}
+          </div>
+        </aside>
+      </div>
+    {% endif %}
+  </main>
+
+  <div id="lightbox">
+    <img id="lightbox-img" src="" alt="card preview">
+  </div>
+
+  <div id="help-modal" class="help-modal" onclick="closeHelp(event)">
+    <section class="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="help-head">
+        <h2 id="help-title">多人模式帮助</h2>
+        <button class="secondary" type="button" onclick="closeHelp()">关闭</button>
+      </div>
+      <h3>房间流程</h3>
+      <ul>
+        <li>房主创建房间后分享房间号或链接，其他玩家可在首页输入房间号加入。</li>
+        <li>加入后先点击准备；非房主玩家准备后，房主可以设置时长并开始游戏。</li>
+        <li>所有玩家猜同一张目标卡，联想输入会搜索全部卡片。</li>
+      </ul>
+      <h3>计分与放弃</h3>
+      <ul>
+        <li>按猜中顺序获得 4 / 3 / 2 / 1 分。</li>
+        <li>放弃只影响当前题，本题不能继续猜；全部未猜中的玩家都放弃或超时后会显示答案。</li>
+        <li>答案显示 5 秒后自动进入下一题，累计分数保留。</li>
+      </ul>
+      <h3>颜色含义</h3>
+      <ul>
+        <li><span class="tag tag-green">绿色</span> 完全正确。</li>
+        <li><span class="tag tag-yellow">黄色</span> 数值在+-500/2范围内。</li>
+        <li><span class="tag tag-red">红色</span> 不匹配。</li>
+        <li><span class="tag tag-gray">灰色</span> 空值、不可比较或无信息。</li>
+      </ul>
+    </section>
+  </div>
+
+  <script>
+  function openHelp() {
+    document.getElementById("help-modal").classList.add("open");
+  }
+  function closeHelp(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById("help-modal").classList.remove("open");
+  }
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeHelp();
+  });
+  </script>
+
+  {% if room %}
+  <script>
+  const roomId = "{{ room.id }}";
+  const initialStatus = "{{ room.status }}";
+  const initialRound = Number("{{ room.round|default(0) }}");
+  const initialNextRoundIn = Number("{{ next_round_in|default(0, true) }}");
+  const initialSurrendered = "{{ '1' if player and player.surrendered else '0' }}" === "1";
+  const countdown = document.getElementById("countdown");
+  const roomStatus = document.getElementById("room-status");
+  const readyCount = document.getElementById("ready-count");
+  const playerCount = document.getElementById("player-count");
+  const preview = document.getElementById("preview");
+  const sug = document.getElementById("suggestions");
+  const input = document.getElementById("guess");
+  const hid = document.getElementById("guess_id");
+
+  function debounce(fn, delay) {
+    let timeout = null;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
+
+  function statusLabel(status) {
+    if (status === "waiting") return "等待中";
+    if (status === "playing") return "进行中";
+    if (status === "revealing") return "揭晓中";
+    return "已结束";
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[ch]));
+  }
+
+  async function fetchSuggestionsRaw() {
+    if (!input || !sug) return;
+    const kw = input.value.trim();
+    if (!kw) {
+      hid.value = "";
+      sug.hidden = true;
+      sug.innerHTML = "";
+      if (preview) preview.style.display = "none";
+      return;
+    }
+    const resp = await fetch(`/suggest?q=${encodeURIComponent(kw)}`);
+    const items = await resp.json();
+    sug.innerHTML = "";
+    for (const item of items.slice(0, 30)) {
+      const li = document.createElement("li");
+      li.dataset.id = item.id;
+      li.innerHTML = `<span>${escapeHtml(item.name)}</span><span class="suggest-id">#${item.id}</span>`;
+      li.addEventListener("mouseenter", () => showPreview(li, item));
+      li.addEventListener("mouseleave", () => setTimeout(hidePreviewIfOutside, 80));
+      li.addEventListener("click", () => {
+        input.value = item.name;
+        hid.value = item.id;
+        sug.hidden = true;
+        if (preview) preview.style.display = "none";
+      });
+      sug.append(li);
+    }
+    sug.hidden = items.length === 0;
+  }
+
+  function showPreview(li, item) {
+    if (!preview) return;
+    preview.innerHTML = `
+      <img id="preview-img"
+           src="/static/card/${item.id}.jpg"
+           alt="${escapeHtml(item.name)}"
+           style="cursor:zoom-in;"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div style="display:none; padding:12px; color:#666; font-size:14px;">
+        图片未下载：${item.id}
+      </div>
+    `;
+    const r = li.getBoundingClientRect();
+    preview.style.top = `${Math.min(r.top + window.scrollY, window.innerHeight - 260)}px`;
+    preview.style.left = `${Math.min(r.right + 12 + window.scrollX, window.innerWidth - 200)}px`;
+    preview.style.display = "block";
+
+    const previewImg = document.getElementById("preview-img");
+    if (previewImg) {
+      previewImg.addEventListener("click", () => {
+        const lb = document.getElementById("lightbox");
+        const lbImg = document.getElementById("lightbox-img");
+        lbImg.src = previewImg.src;
+        lb.style.display = "flex";
+      });
+    }
+  }
+
+  function hidePreviewIfOutside() {
+    if (!preview) return;
+    if (!document.querySelector("#suggestions li:hover") && !preview.matches(":hover")) {
+      preview.style.display = "none";
+    }
+  }
+
+  if (preview) {
+    preview.addEventListener("mouseenter", () => preview.style.display = "block");
+    preview.addEventListener("mouseleave", () => setTimeout(hidePreviewIfOutside, 80));
+  }
+
+  const fetchSuggestions = debounce(fetchSuggestionsRaw, 200);
+  window.fetchSuggestions = fetchSuggestions;
+
+  document.addEventListener("click", e => {
+    if (sug && preview && !e.target.closest(".guess-form") && !e.target.closest("#preview")) {
+      sug.hidden = true;
+      preview.style.display = "none";
+    }
+  });
+
+  document.getElementById("lightbox").addEventListener("click", e => {
+    e.currentTarget.style.display = "none";
+  });
+
+  async function refreshState() {
+    const resp = await fetch(`/multiplayer/${roomId}/state`);
+    const state = await resp.json();
+    if (!state.exists) return;
+    if (countdown) countdown.textContent = state.remaining;
+    if (roomStatus) roomStatus.textContent = statusLabel(state.status);
+    if (readyCount) readyCount.textContent = state.ready_count;
+    if (playerCount) playerCount.textContent = state.scoreboard.length;
+
+    const scoreList = document.getElementById("score-list");
+    if (scoreList) {
+      scoreList.innerHTML = state.scoreboard.map(p => {
+        const badges = [
+          p.is_owner ? '<span class="badge owner">房主</span>' : '',
+          state.status === "waiting" ? `<span class="badge ${p.ready ? "ready" : "wait"}">${p.ready ? "已准备" : "未准备"}</span>` : '',
+          p.surrendered ? '<span class="badge wait">已放弃</span>' : ''
+        ].join("");
+        return `
+          <div class="score-row">
+            <span class="rank ${p.rank ? "done" : ""}">${p.rank || "-"}</span>
+            <span class="player-name">${escapeHtml(p.name)}${badges}</span>
+            <span class="score">${p.score}</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    const events = document.getElementById("events");
+    if (events) {
+      events.innerHTML = state.events.map(e => `<div>${escapeHtml(e.name)}：${escapeHtml(e.message)}</div>`).join("");
+    }
+
+    const currentSurrendered = !!(state.current_player && state.current_player.surrendered);
+    if (
+      initialStatus !== state.status ||
+      initialRound !== Number(state.round || 0) ||
+      (initialStatus === "playing" && initialSurrendered !== currentSurrendered)
+    ) {
+      window.location.reload();
+      return;
+    }
+  }
+  setInterval(refreshState, 1000);
+  setInterval(() => {
+    if (!countdown || (initialStatus !== "playing" && initialStatus !== "revealing")) return;
+    const next = Math.max(0, Number(countdown.textContent || 0) - 1);
+    countdown.textContent = next;
+    if (initialStatus === "revealing" && next === 0) {
+      refreshState();
+    }
+  }, 1000);
+  if (initialStatus === "revealing") {
+    setTimeout(refreshState, Math.max(1, initialNextRoundIn + 1) * 1000);
+    setTimeout(() => window.location.reload(), Math.max(2, initialNextRoundIn + 2) * 1000);
+  }
+  </script>
+  {% endif %}
+</body>
+</html>
