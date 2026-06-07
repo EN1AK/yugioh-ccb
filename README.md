@@ -44,3 +44,45 @@ b站首页：https://space.bilibili.com/178060734
 
 
 
+## Docker 部署
+
+服务器安装 Docker 和 Docker Compose 后，在项目目录执行：
+
+```bash
+docker compose up -d --build
+```
+
+访问：
+
+```text
+http://服务器IP:7860
+```
+
+默认使用 Redis 保存 session，并将以下目录挂载到容器内，便于持久化更新：
+
+```text
+./asset -> /app/asset
+./static/card -> /app/static/card
+```
+
+`asset/` 内保存 `cards.cdb`、`cards.cdb.md5`、`strings.conf`。首次启动时，如果挂载的 `./asset` 为空，容器会自动复制镜像内置数据到 `./asset`。
+
+更新卡片数据和卡图：
+
+```bash
+docker compose run --rm web python card_build.py
+docker compose restart web
+```
+
+如果只想先更新数据库、不下载卡图：
+
+```bash
+docker compose run --rm web python card_build.py --skip-images
+docker compose restart web
+```
+
+生产环境建议设置随机密钥：
+
+```bash
+SECRET_KEY="换成一串随机长字符串" docker compose up -d
+```

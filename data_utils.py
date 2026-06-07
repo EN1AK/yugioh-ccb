@@ -2,13 +2,17 @@ import sqlite3
 import pandas as pd
 import numbers
 import json
+import os
 from pathlib import Path
 import sys
 from map import RACE_MAP, TYPE_MAP, CATEGORY_TAGS, TYPE_LINK, LINK_MARKERS, SETNAME_MAP, ATTR_MAP, TYPE_PENDULUM,TYPE_MONSTER
 
 
 def load_system_category_tags() -> dict[int, str]:
-    conf_path = Path(__file__).parent / "strings.conf"
+    data_dir = os.environ.get("DATA_DIR")
+    conf_path = Path(data_dir) / "strings.conf" if data_dir else Path(__file__).parent / "asset" / "strings.conf"
+    if data_dir and not conf_path.exists():
+        conf_path = Path(__file__).parent / "asset" / "strings.conf"
     if not conf_path.exists():
         return {}
 
@@ -79,15 +83,19 @@ def load_card_database(path: str = None) -> pd.DataFrame:
     """
     # 1. 自动定位数据库文件
     if path is None:
-        # PyInstaller 打包后会把数据放到 _MEIPASS 里
-        base = getattr(sys, "_MEIPASS", None)
-        if base is None:
-            # 普通脚本运行，数据库和脚本在同一个目录
-            base = Path(__file__).parent
+        data_dir = os.environ.get("DATA_DIR")
+        if data_dir:
+            db_file = Path(data_dir) / "cards.cdb"
         else:
-            # 打包执行时，_MEIPASS 已经是一个 str 临时目录
-            base = Path(base)
-        db_file = base / "cards.cdb"
+            # PyInstaller 打包后会把数据放到 _MEIPASS 里
+            base = getattr(sys, "_MEIPASS", None)
+            if base is None:
+                # 普通脚本运行，默认从 asset 目录读取数据库
+                db_file = Path(__file__).parent / "asset" / "cards.cdb"
+            else:
+                # 打包执行时，_MEIPASS 已经是一个 str 临时目录
+                base = Path(base)
+                db_file = base / "asset" / "cards.cdb"
     else:
         db_file = Path(path)
 

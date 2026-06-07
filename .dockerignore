@@ -1,9 +1,6 @@
 __pycache__
 *.py[cod]
 static/card/
-
-cards.cdb
+asset/*.bak
 
 .git*
-Dockerfile
-.dockerignore

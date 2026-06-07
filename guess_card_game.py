@@ -15,7 +15,7 @@ template_folder = os.path.join(base_path, "templates")
 app = Flask(__name__, template_folder=template_folder)
 db = None
 target_row = None
-app.secret_key = "你自己的随机 Secret Key"
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
 db = load_card_database()
 rooms = {}

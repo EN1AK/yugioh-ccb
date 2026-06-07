@@ -9,6 +9,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -35,10 +36,12 @@ HOT_API_PARAMS = {
 }
 
 ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "cards.cdb"
-MD5_PATH = ROOT / "cards.cdb.md5"
-IMAGE_DIR = ROOT / "static" / "card"
-STRINGS_CONF_PATH = ROOT / "strings.conf"
+DEFAULT_DATA_DIR = ROOT / "asset"
+DATA_DIR = Path(os.environ.get("DATA_DIR", DEFAULT_DATA_DIR))
+DB_PATH = DATA_DIR / "cards.cdb"
+MD5_PATH = DATA_DIR / "cards.cdb.md5"
+IMAGE_DIR = Path(os.environ.get("IMAGE_DIR", ROOT / "static" / "card"))
+STRINGS_CONF_PATH = DATA_DIR / "strings.conf"
 
 
 def int_value(value, default=0):
@@ -167,6 +170,7 @@ def create_database(cards: dict, db_path: Path = DB_PATH, category_map: dict[int
     if not rows:
         raise RuntimeError("没有可写入数据库的卡片数据")
 
+    existing_meta = load_existing_card_meta(db_path)
     fd, tmp_name = tempfile.mkstemp(prefix="cards-", suffix=".cdb", dir=str(db_path.parent))
     os.close(fd)
     tmp_path = Path(tmp_name)
@@ -249,16 +253,67 @@ def create_database(cards: dict, db_path: Path = DB_PATH, category_map: dict[int
             "INSERT OR IGNORE INTO card_meta (id, first_jp_release, jp_packs) VALUES (:id, '', '[]');",
             rows,
         )
+        row_ids = {row["id"] for row in rows}
+        preserved_meta = [
+            (card_id, first_date, packs)
+            for card_id, (first_date, packs) in existing_meta.items()
+            if card_id in row_ids
+        ]
+        if preserved_meta:
+            cur.executemany(
+                """
+                UPDATE card_meta
+                   SET first_jp_release = ?,
+                       jp_packs = ?
+                 WHERE id = ?;
+                """,
+                [(first_date, packs, card_id) for card_id, first_date, packs in preserved_meta],
+            )
         cur.execute("CREATE INDEX idx_texts_name ON texts(name);")
         conn.commit()
         conn.close()
 
+        backup_existing_database(db_path)
         tmp_path.replace(db_path)
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise
 
     return len(rows)
+
+
+def backup_existing_database(db_path: Path):
+    if not db_path.exists():
+        return
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    backup_path = db_path.with_name(f"{db_path.name}.{timestamp}.bak")
+    shutil.copy2(db_path, backup_path)
+    print(f"已备份旧数据库: {backup_path}")
+
+
+def load_existing_card_meta(db_path: Path) -> dict[int, tuple[str, str]]:
+    if not db_path.exists():
+        return {}
+    conn = sqlite3.connect(str(db_path))
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT id, COALESCE(first_jp_release, ''), COALESCE(jp_packs, '[]')
+              FROM card_meta
+             WHERE COALESCE(first_jp_release, '') != ''
+                OR COALESCE(jp_packs, '[]') != '[]';
+            """
+        )
+        rows = {
+            int(card_id): (first_date or "", packs or "[]")
+            for card_id, first_date, packs in cur.fetchall()
+        }
+    except sqlite3.OperationalError:
+        rows = {}
+    finally:
+        conn.close()
+    return rows
 
 
 def ensure_card_meta_table(db_path: Path = DB_PATH):
@@ -413,10 +468,15 @@ def update_pack_info(db_path: Path, card_ids: list[int], workers: int = 8, timeo
         for index, future in enumerate(as_completed(futures), start=1):
             try:
                 card_id, first_date, labels = future.result()
-                rows.append((card_id, first_date, json.dumps(labels, ensure_ascii=False)))
+                pack_payload = labels if labels else None
+                rows.append((card_id, first_date, json.dumps(pack_payload, ensure_ascii=False)))
                 stats["updated"] += 1
             except Exception:
                 stats["failed"] += 1
+
+            if len(rows) >= 100:
+                save_pack_info_rows(db_path, rows)
+                rows.clear()
 
             if index % 200 == 0 or index == total:
                 elapsed = max(time.time() - started, 0.1)
@@ -427,22 +487,26 @@ def update_pack_info(db_path: Path, card_ids: list[int], workers: int = 8, timeo
                 )
 
     if rows:
-        conn = sqlite3.connect(str(db_path))
-        cur = conn.cursor()
-        cur.executemany(
-            """
-            INSERT INTO card_meta (id, first_jp_release, jp_packs)
-            VALUES (?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                first_jp_release = excluded.first_jp_release,
-                jp_packs = excluded.jp_packs;
-            """,
-            rows,
-        )
-        conn.commit()
-        conn.close()
+        save_pack_info_rows(db_path, rows)
 
     return stats
+
+
+def save_pack_info_rows(db_path: Path, rows: list[tuple[int, str, str]]):
+    conn = sqlite3.connect(str(db_path))
+    cur = conn.cursor()
+    cur.executemany(
+        """
+        INSERT INTO card_meta (id, first_jp_release, jp_packs)
+        VALUES (?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            first_jp_release = excluded.first_jp_release,
+            jp_packs = excluded.jp_packs;
+        """,
+        rows,
+    )
+    conn.commit()
+    conn.close()
 
 
 def download_one_image(session: requests.Session, card_id: int, image_dir: Path, timeout: int) -> str:
@@ -516,6 +580,8 @@ def main():
     db_path = Path(args.db).resolve()
     image_dir = Path(args.image_dir).resolve()
     md5_path = db_path.with_name(db_path.name + ".md5")
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    image_dir.mkdir(parents=True, exist_ok=True)
 
     remote_md5 = fetch_remote_md5()
     local_md5 = read_local_md5(md5_path)
