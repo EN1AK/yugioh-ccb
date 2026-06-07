@@ -4,7 +4,7 @@ import sys
 import time
 import uuid
 from datetime import timedelta
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 from flask_session import Session
 import redis
 
@@ -19,6 +19,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
 db = load_card_database()
 rooms = {}
+SITE_URL = os.environ.get("SITE_URL", "https://www.ygoccb.site").rstrip("/")
 DEFAULT_ROOM_DURATION_SECONDS = 5 * 60
 MIN_ROOM_DURATION_SECONDS = 60
 MAX_ROOM_DURATION_SECONDS = 30 * 60
@@ -250,6 +251,37 @@ def room_scoreboard(room):
         room["players"].values(),
         key=lambda p: (p["rank"] is None, p["rank"] or 99, -p["score"], p["name"])
     )
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    body = f"""User-agent: *
+Allow: /
+Sitemap: {SITE_URL}/sitemap.xml
+"""
+    return Response(body, mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    urls = [
+        ("", "daily", "1.0"),
+        ("/game", "weekly", "0.7"),
+    ]
+    items = "\n".join(
+        f"""  <url>
+    <loc>{SITE_URL}{path}</loc>
+    <changefreq>{changefreq}</changefreq>
+    <priority>{priority}</priority>
+  </url>"""
+        for path, changefreq, priority in urls
+    )
+    body = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>
+"""
+    return Response(body, mimetype="application/xml")
 
 
 @app.route("/", methods=["GET", "POST"])
