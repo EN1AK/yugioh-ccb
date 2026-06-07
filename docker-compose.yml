@@ -1,0 +1,33 @@
+services:
+  web:
+    build: .
+    image: yugioh-ccb:latest
+    container_name: yugioh-ccb
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      PORT: "7860"
+      DATA_DIR: "/app/asset"
+      IMAGE_DIR: "/app/static/card"
+      SECRET_KEY: "${SECRET_KEY:-change-me-in-production}"
+      REDIS_URL: "redis://redis:6379/0"
+      WEB_CONCURRENCY: "1"
+      WEB_THREADS: "8"
+      WEB_TIMEOUT: "120"
+    volumes:
+      - ./asset:/app/asset
+      - ./static/card:/app/static/card
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: yugioh-ccb-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
