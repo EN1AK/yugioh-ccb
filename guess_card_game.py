@@ -3,7 +3,8 @@ import random
 import sys
 import time
 import uuid
-from datetime import timedelta
+import json
+from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 from flask_session import Session
 import redis
@@ -20,6 +21,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 db = load_card_database()
 rooms = {}
 SITE_URL = os.environ.get("SITE_URL", "https://www.ygoccb.site").rstrip("/")
+FEEDBACK_PATH = os.environ.get("FEEDBACK_PATH", os.path.join(os.environ.get("DATA_DIR", os.path.join(base_path, "asset")), "feedback.jsonl"))
 DEFAULT_ROOM_DURATION_SECONDS = 5 * 60
 MIN_ROOM_DURATION_SECONDS = 60
 MAX_ROOM_DURATION_SECONDS = 30 * 60
@@ -282,6 +284,32 @@ def sitemap_xml():
 </urlset>
 """
     return Response(body, mimetype="application/xml")
+
+
+@app.route("/feedback", methods=["POST"])
+def feedback():
+    payload = request.get_json(silent=True) or request.form
+    message = str(payload.get("message", "")).strip()
+    contact = str(payload.get("contact", "")).strip()
+    page = str(payload.get("page", "")).strip()
+
+    if not message:
+        return jsonify({"ok": False, "error": "反馈内容不能为空。"}), 400
+
+    record = {
+        "time": datetime.now(timezone.utc).isoformat(),
+        "message": message[:2000],
+        "contact": contact[:200],
+        "page": page[:500],
+        "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+        "user_agent": request.headers.get("User-Agent", "")[:500],
+    }
+
+    os.makedirs(os.path.dirname(FEEDBACK_PATH), exist_ok=True)
+    with open(FEEDBACK_PATH, "a", encoding="utf-8") as fp:
+        fp.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    return jsonify({"ok": True})
 
 
 @app.route("/", methods=["GET", "POST"])

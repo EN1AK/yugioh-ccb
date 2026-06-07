@@ -1,0 +1,147 @@
+<style>
+  .feedback-fab {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 70;
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 18px;
+    background: #1f2a44;
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 14px 30px rgba(20, 28, 48, 0.25);
+    cursor: pointer;
+  }
+  .feedback-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+  }
+  .feedback-modal.open { display: flex; }
+  .feedback-panel {
+    width: min(520px, 100%);
+    border-radius: 22px;
+    background: #fff;
+    color: #182033;
+    padding: 22px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.28);
+  }
+  .feedback-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  .feedback-head h2 {
+    margin: 0;
+    font-size: 22px;
+  }
+  .feedback-close {
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: #edf0f5;
+    color: #4b5563;
+    cursor: pointer;
+  }
+  .feedback-panel label {
+    display: block;
+    margin: 12px 0 6px;
+    font-weight: 700;
+  }
+  .feedback-panel textarea,
+  .feedback-panel input {
+    width: 100%;
+    border: 1px solid #d8deea;
+    border-radius: 14px;
+    padding: 12px 14px;
+    font: inherit;
+  }
+  .feedback-panel textarea {
+    min-height: 130px;
+    resize: vertical;
+  }
+  .feedback-submit {
+    width: 100%;
+    margin-top: 16px;
+    border: 0;
+    border-radius: 14px;
+    padding: 13px 16px;
+    background: #d6a84f;
+    color: #1f2a44;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .feedback-status {
+    min-height: 22px;
+    margin-top: 10px;
+    color: #687083;
+    font-size: 14px;
+  }
+</style>
+
+<button class="feedback-fab" type="button" onclick="openFeedback()">反馈</button>
+
+<div id="feedback-modal" class="feedback-modal" onclick="closeFeedback(event)">
+  <section class="feedback-panel" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+    <div class="feedback-head">
+      <h2 id="feedback-title">反馈信息</h2>
+      <button class="feedback-close" type="button" onclick="closeFeedback()">关闭</button>
+    </div>
+    <form id="feedback-form">
+      <label for="feedback-message">问题或建议</label>
+      <textarea id="feedback-message" name="message" maxlength="2000" placeholder="例如：某张卡信息不准确、图片错误、页面问题、玩法建议等。" required></textarea>
+      <label for="feedback-contact">联系方式（可选）</label>
+      <input id="feedback-contact" name="contact" maxlength="200" placeholder="邮箱、QQ 或其他联系方式">
+      <button class="feedback-submit" type="submit">提交反馈</button>
+      <div id="feedback-status" class="feedback-status"></div>
+    </form>
+  </section>
+</div>
+
+<script>
+function openFeedback() {
+  document.getElementById("feedback-modal").classList.add("open");
+  document.getElementById("feedback-message").focus();
+}
+function closeFeedback(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("feedback-modal").classList.remove("open");
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeFeedback();
+});
+document.getElementById("feedback-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.getElementById("feedback-status");
+  const form = event.currentTarget;
+  const message = form.message.value.trim();
+  const contact = form.contact.value.trim();
+  if (!message) {
+    status.textContent = "请填写反馈内容。";
+    return;
+  }
+  status.textContent = "正在提交...";
+  try {
+    const resp = await fetch("/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, contact, page: window.location.href })
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) throw new Error(data.error || "提交失败");
+    form.reset();
+    status.textContent = "已收到反馈，感谢。";
+    setTimeout(() => closeFeedback(), 800);
+  } catch (err) {
+    status.textContent = err.message || "提交失败，请稍后再试。";
+  }
+});
+</script>

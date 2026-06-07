@@ -486,7 +486,7 @@
               </tr>
             </thead>
             <tbody>
-              {% for entry in history %}
+              {% for entry in history|reverse %}
               <tr>
                 <td>{{ entry.guess_name }}</td>
                 <td>{{ entry.compare['攻击']|safe }}</td>
@@ -651,5 +651,6 @@
     e.currentTarget.style.display = "none";
   });
   </script>
+  {% include "feedback.html" %}
 </body>
 </html>
