@@ -481,7 +481,7 @@
           <table>
             <thead>
               <tr>
-                <th>卡名</th><th>攻击</th><th>守备</th><th>等级/阶级</th><th>刻度</th><th>箭头</th>
+                <th>卡名</th><th>攻击</th><th>守备</th><th>等级/阶级/连接值</th><th>刻度</th><th>箭头</th>
                 <th>类型</th><th>属性</th><th>种族</th><th>效果标签</th><th>系列</th><th>最早发售</th><th>收录卡包</th>
               </tr>
             </thead>
@@ -491,7 +491,7 @@
                 <td>{{ entry.guess_name }}</td>
                 <td>{{ entry.compare['攻击']|safe }}</td>
                 <td>{{ entry.compare['守备']|safe }}</td>
-                <td>{{ entry.compare['等级/阶级']|safe }}</td>
+                <td>{{ entry.compare['等级/阶级/连接值']|safe }}</td>
                 <td>{{ entry.compare['刻度']|safe }}</td>
                 <td>{{ entry.compare['箭头']|safe }}</td>
                 <td>{{ entry.compare['类型']|safe }}</td>
@@ -534,7 +534,7 @@
       <h3>颜色含义</h3>
       <ul>
         <li><span class="tag tag-green">绿色</span> 完全正确。</li>
-        <li><span class="tag tag-yellow">黄色</span> 数值在+-500/2范围内。</li>
+        <li><span class="tag tag-yellow">黄色</span> 接近正确：攻击/守备差值在 500 内，等级/阶级/连接值/刻度差值在 2 内，最早发售日期差值在 1 年内。</li>
         <li><span class="tag tag-red">红色</span> 不匹配。</li>
         <li><span class="tag tag-gray">灰色</span> 该属性为空、不可比较或无对应信息。</li>
       </ul>

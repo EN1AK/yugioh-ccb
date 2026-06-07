@@ -26,7 +26,12 @@ CARDS_ZIP_MD5_URL = "https://ygocdb.com/api/v0/cards.zip.md5"
 CATEGORY_CDB_URL = "https://cdn02.moecube.com:444/ygopro-database/zh-CN/cards.cdb"
 STRINGS_CONF_URL = "https://cdn02.moecube.com:444/ygopro-database/zh-CN/strings.conf"
 CARD_DETAIL_URL = "https://ygocdb.com/api/v0/card/{id}?show=all"
-CARD_IMAGE_URL = "https://cdn.233.momobako.com/ygopro/pics/{id}.jpg"
+SUPER_PRE_IMAGE_URL = "https://cdntx.moecube.com/ygopro-super-pre/data/pics/{id}.jpg"
+MOMOBAKO_IMAGE_URL = "https://cdn.233.momobako.com/ygopro/pics/{id}.jpg"
+CARD_IMAGE_URLS = [
+    SUPER_PRE_IMAGE_URL,
+    MOMOBAKO_IMAGE_URL,
+]
 HOT_API_URL = "https://sapi.moecube.com:444/ygopro/analytics/single/type"
 HOT_API_PARAMS = {
     "type": "month",
@@ -305,10 +310,16 @@ def load_existing_card_meta(db_path: Path) -> dict[int, tuple[str, str]]:
                 OR COALESCE(jp_packs, '[]') != '[]';
             """
         )
-        rows = {
-            int(card_id): (first_date or "", packs or "[]")
-            for card_id, first_date, packs in cur.fetchall()
-        }
+        rows = {}
+        for card_id, first_date, packs in cur.fetchall():
+            raw_packs = packs or "[]"
+            try:
+                parsed_packs = json.loads(raw_packs)
+            except json.JSONDecodeError:
+                parsed_packs = []
+            if isinstance(parsed_packs, list):
+                raw_packs = json.dumps(normalize_pack_labels(parsed_packs), ensure_ascii=False)
+            rows[int(card_id)] = (first_date or "", raw_packs)
     except sqlite3.OperationalError:
         rows = {}
     finally:
@@ -428,6 +439,7 @@ def normalize_jp_packs(payload: dict) -> tuple[str, list[str]]:
         date = str(pack.get("date") or "").strip()
         if not name and not setid:
             continue
+        setid = normalize_pack_setid(setid)
         label = f"{name} ({setid})" if setid else name
         normalized.append({"date": date, "label": label})
 
@@ -443,6 +455,61 @@ def normalize_jp_packs(payload: dict) -> tuple[str, list[str]]:
         seen.add(label)
         labels.append(label)
     return first_date, labels
+
+
+def normalize_pack_setid(setid: str) -> str:
+    return setid.split("-", 1)[0].strip() if "-" in setid else setid.strip()
+
+
+def normalize_pack_label(label: str) -> str:
+    label = label.strip()
+    if not label.endswith(")"):
+        return label
+
+    open_index = label.rfind("(")
+    if open_index < 0:
+        return label
+
+    prefix = label[:open_index].rstrip()
+    suffix = label[open_index + 1 : -1].strip()
+    if "-" not in suffix:
+        return label
+
+    pack_code = normalize_pack_setid(suffix)
+    return f"{prefix} ({pack_code})" if pack_code else prefix
+
+
+def normalize_pack_labels(labels: list) -> list[str]:
+    return [normalize_pack_label(label) for label in labels if isinstance(label, str)]
+
+
+def normalize_existing_pack_info(db_path: Path = DB_PATH) -> int:
+    conn = sqlite3.connect(str(db_path))
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, jp_packs FROM card_meta WHERE COALESCE(jp_packs, '[]') != '[]';")
+    except sqlite3.OperationalError:
+        conn.close()
+        return 0
+
+    rows = []
+    for card_id, raw_packs in cur.fetchall():
+        try:
+            packs = json.loads(raw_packs or "[]")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(packs, list):
+            continue
+        normalized = normalize_pack_labels(packs)
+        new_raw = json.dumps(normalized, ensure_ascii=False)
+        if new_raw != raw_packs:
+            rows.append((new_raw, card_id))
+
+    if rows:
+        cur.executemany("UPDATE card_meta SET jp_packs = ? WHERE id = ?;", rows)
+        conn.commit()
+    conn.close()
+    return len(rows)
 
 
 def fetch_one_pack_info(session: requests.Session, card_id: int, timeout: int) -> tuple[int, str, list[str]]:
@@ -511,26 +578,41 @@ def save_pack_info_rows(db_path: Path, rows: list[tuple[int, str, str]]):
 
 def download_one_image(session: requests.Session, card_id: int, image_dir: Path, timeout: int) -> str:
     target = image_dir / f"{card_id}.jpg"
-    if target.exists() and target.stat().st_size > 0:
+    has_local_image = target.exists() and target.stat().st_size > 0
+
+    failed = False
+    content = None
+    used_super_pre = False
+    for url_template in CARD_IMAGE_URLS:
+        url = url_template.format(id=card_id)
+        try:
+            response = session.get(url, timeout=timeout)
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+        except requests.RequestException:
+            failed = True
+            continue
+        if response.content:
+            content = response.content
+            used_super_pre = url_template == SUPER_PRE_IMAGE_URL
+            break
+
+    if has_local_image and not used_super_pre:
         return "skipped"
 
-    url = CARD_IMAGE_URL.format(id=card_id)
-    response = session.get(url, timeout=timeout)
-    if response.status_code == 404:
-        return "missing"
-    response.raise_for_status()
-    if not response.content:
-        return "missing"
+    if not content:
+        return "failed" if failed else "missing"
 
     tmp = target.with_suffix(".jpg.tmp")
-    tmp.write_bytes(response.content)
+    tmp.write_bytes(content)
     tmp.replace(target)
-    return "downloaded"
+    return "updated" if has_local_image else "downloaded"
 
 
 def download_images(card_ids: list[int], image_dir: Path = IMAGE_DIR, workers: int = 12, timeout: int = 20) -> dict:
     image_dir.mkdir(parents=True, exist_ok=True)
-    stats = {"downloaded": 0, "skipped": 0, "missing": 0, "failed": 0}
+    stats = {"downloaded": 0, "updated": 0, "skipped": 0, "missing": 0, "failed": 0}
     total = len(card_ids)
     started = time.time()
 
@@ -567,7 +649,9 @@ def parse_args():
     parser.add_argument("--skip-category", action="store_true", help="do not download legacy cards.cdb for category tags")
     parser.add_argument("--skip-pack-info", action="store_true", help="do not fetch jppacks metadata")
     parser.add_argument("--skip-images", action="store_true", help="do not download card images")
+    parser.add_argument("--normalize-pack-info", action="store_true", help="normalize stored jppacks labels and exit")
     parser.add_argument("--pack-limit", type=int, default=0, help="fetch pack info for first N missing cards")
+    parser.add_argument("--image-id", type=int, action="append", default=[], help="download only the specified card id; can be used more than once")
     parser.add_argument("--image-limit", type=int, default=0, help="download only first N images for testing")
     parser.add_argument("--pack-workers", type=int, default=8, help="parallel pack-info workers")
     parser.add_argument("--workers", type=int, default=12, help="parallel image download workers")
@@ -582,6 +666,11 @@ def main():
     md5_path = db_path.with_name(db_path.name + ".md5")
     db_path.parent.mkdir(parents=True, exist_ok=True)
     image_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.normalize_pack_info:
+        count = normalize_existing_pack_info(db_path)
+        print(f"normalized pack info rows: {count}")
+        return
 
     remote_md5 = fetch_remote_md5()
     local_md5 = read_local_md5(md5_path)
@@ -635,6 +724,9 @@ def main():
     else:
         card_ids = sorted({int_value(card.get("id")) for card in cards.values() if isinstance(card, dict)})
         card_ids = [card_id for card_id in card_ids if card_id > 0]
+    if args.image_id:
+        requested_ids = {card_id for card_id in args.image_id if card_id > 0}
+        card_ids = [card_id for card_id in card_ids if card_id in requested_ids]
     if args.image_limit > 0:
         card_ids = card_ids[: args.image_limit]
 

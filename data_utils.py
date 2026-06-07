@@ -3,6 +3,7 @@ import pandas as pd
 import numbers
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 import sys
 from map import RACE_MAP, TYPE_MAP, CATEGORY_TAGS, TYPE_LINK, LINK_MARKERS, SETNAME_MAP, ATTR_MAP, TYPE_PENDULUM,TYPE_MONSTER
@@ -136,14 +137,47 @@ def load_card_database(path: str = None) -> pd.DataFrame:
 
 def parse_json_list(value):
     if isinstance(value, list):
-        return value
+        return normalize_pack_labels(value)
     if not isinstance(value, str) or not value.strip():
         return []
     try:
         parsed = json.loads(value)
     except json.JSONDecodeError:
         return []
-    return parsed if isinstance(parsed, list) else []
+    return normalize_pack_labels(parsed) if isinstance(parsed, list) else []
+
+
+def normalize_pack_labels(labels):
+    return [normalize_pack_label(label) for label in labels if isinstance(label, str)]
+
+
+def normalize_pack_label(label: str) -> str:
+    label = label.strip()
+    if not label.endswith(")"):
+        return label
+
+    open_index = label.rfind("(")
+    if open_index < 0:
+        return label
+
+    prefix = label[:open_index].rstrip()
+    suffix = label[open_index + 1 : -1].strip()
+    if "-" not in suffix:
+        return label
+
+    pack_code = suffix.split("-", 1)[0].strip()
+    return f"{prefix} ({pack_code})" if pack_code else prefix
+
+
+def parse_release_date(value):
+    if not isinstance(value, str) or not value.strip():
+        return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m", "%Y/%m", "%Y"):
+        try:
+            return datetime.strptime(value.strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def card_to_tags(row):
@@ -166,7 +200,7 @@ def card_to_tags(row):
             def_val = ""
         else:
             def_val = "？" if row["def"] == -2 else row["def"]
-        # 等级/阶级
+        # 等级/阶级；连接怪兽这里对应连接值
         level = row["level"] & 0xFF
         # 刻度只有灵摆怪兽才有
         scale = (row["level"] >> 24) & 0xFF if is_pendulum else ""
@@ -177,7 +211,7 @@ def card_to_tags(row):
         "卡名": row["name"],
         "攻击": atk_val,
         "守备": def_val,
-        "等级/阶级": level,
+        "等级/阶级/连接值": level,
         "箭头": arrows,
         "刻度": scale,
         "类型": type_names,
@@ -191,7 +225,24 @@ def card_to_tags(row):
 
 
 def compare_tags(guess_tags, answer_tags):
-    def cmp(key, val1, val2):
+    def cmp_release_date(val1, val2):
+        guess_date = parse_release_date(val1)
+        answer_date = parse_release_date(val2)
+        if not guess_date or not answer_date:
+            return f'<span class="tag tag-gray">{val1}</span>'
+        diff_days = abs((guess_date - answer_date).days)
+        if diff_days == 0:
+            cls = "tag-green"
+            arrow = ""
+        elif diff_days <= 366:
+            cls = "tag-yellow"
+            arrow = "↑" if guess_date < answer_date else "↓"
+        else:
+            cls = "tag-gray"
+            arrow = "↑" if guess_date < answer_date else "↓"
+        return f'<span class="tag {cls}">{val1}{arrow}</span>'
+
+    def cmp(key, val1, val2, index):
         if (val1 == "" or val1 is None) and (val2 == "" or val2 is None):
             return '<span class="tag tag-gray">—</span>'
         if (val1 == "" or val1 is None) and (val2 != "" or val2 is not None):
@@ -214,6 +265,8 @@ def compare_tags(guess_tags, answer_tags):
                     cls = "tag-gray"
                 pills.append(f'<span class="tag {cls}">{sym}</span>')
             return " ".join(pills)
+        if index == 11:
+            return cmp_release_date(val1, val2)
         # 数值型字段：攻击、守备、等级、刻度
         if isinstance(val1, numbers.Number):
             diff = abs(val1 - val2)
@@ -226,7 +279,7 @@ def compare_tags(guess_tags, answer_tags):
                         cls = "tag-yellow"
                     else:
                         cls = "tag-gray"
-                elif key in ("等级/阶级", "刻度"):
+                elif key in ("等级/阶级/连接值", "刻度"):
                     if diff <= 2:
                         cls = "tag-yellow"
                     else:
@@ -252,6 +305,6 @@ def compare_tags(guess_tags, answer_tags):
             return f'<span class="tag {cls}">{val1}</span>'
 
     return {
-        key: cmp(key, guess_tags[key], answer_tags[key])
-        for key in guess_tags
+        key: cmp(key, guess_tags[key], answer_tags[key], index)
+        for index, key in enumerate(guess_tags)
     }
