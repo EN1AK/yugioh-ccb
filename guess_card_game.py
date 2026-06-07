@@ -61,6 +61,24 @@ def filter_db(mode):
     return db
 
 
+def effect_tags_for(row):
+    return list(card_to_tags(row).get("效果标签", []))
+
+
+def hit_effect_tags_from_history(target_tags, history):
+    target_tag_set = set(target_tags)
+    hit_tags = set()
+    for entry in history:
+        guess_name = entry.get("guess_name") if isinstance(entry, dict) else None
+        if not guess_name:
+            continue
+        match = db[db["name"] == guess_name]
+        if match.empty:
+            continue
+        hit_tags.update(tag for tag in effect_tags_for(match.iloc[0]) if tag in target_tag_set)
+    return hit_tags
+
+
 def cleanup_rooms():
     now = time.time()
     expired = [
@@ -610,17 +628,18 @@ def game():
         return max(0, len(history) // 3 - len(hinted_tags))
 
     def reveal_tag_hint():
-        target_tags = list(card_to_tags(target)["效果标签"])
-        remaining = [tag for tag in target_tags if tag not in hinted_tags]
+        target_tags = effect_tags_for(target)
+        hit_tags = hit_effect_tags_from_history(target_tags, history)
+        remaining = [tag for tag in target_tags if tag not in hit_tags and tag not in hinted_tags]
         if not remaining:
-            return {"error": "这张卡没有更多可提示的效果标签。", "hints": hints}
+            return {"error": "这张卡没有更多未被命中的效果标签可提示。", "hints": hints}
 
         tag_hint = random.choice(remaining)
         hinted_tags.append(tag_hint)
-        hints.append(f"提示：目标卡有效果标签 “{tag_hint}”")
+        hints.append(f"提示：目标卡有一个尚未被你命中的效果标签：“{tag_hint}”")
         session['hints'] = hints
         session['hinted_tags'] = hinted_tags
-        return {"success": "已给出一个正确标签提示。", "hints": hints}
+        return {"success": "已给出一个未被命中的标签提示。", "hints": hints}
 
     if request.method == "POST":
         action = request.form.get("action", "guess")
