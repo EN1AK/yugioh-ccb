@@ -61,6 +61,40 @@ def filter_db(mode):
     return db
 
 
+def card_names(row):
+    names = row.get("names", None)
+    if isinstance(names, list):
+        return [name for name in names if isinstance(name, str) and name.strip()]
+    primary = row.get("name", "")
+    return [primary] if isinstance(primary, str) and primary.strip() else []
+
+
+def card_matches_query(row, query):
+    query = (query or "").strip().lower()
+    if not query:
+        return False
+    return any(query in name.lower() for name in card_names(row))
+
+
+def matched_display_name(row, query):
+    query = (query or "").strip().lower()
+    primary = row.get("name", "")
+    for name in card_names(row):
+        if query and query in name.lower():
+            return name
+    return primary
+
+
+def find_card_by_input(pool, user_input):
+    user_input = (user_input or "").strip()
+    if not user_input:
+        return None
+    for _, row in pool.iterrows():
+        if card_matches_query(row, user_input):
+            return row
+    return None
+
+
 def effect_tags_for(row):
     return list(card_to_tags(row).get("效果标签", []))
 
@@ -480,9 +514,7 @@ def multiplayer_room(room_id):
                         guess = None
                 if guess is None:
                     user_input = request.form.get("guess", "").strip()
-                    match = db[db["name"].str.contains(user_input, case=False, na=False, regex=False)]
-                    if not match.empty:
-                        guess = match.iloc[0]
+                    guess = find_card_by_input(db, user_input)
 
                 if guess is None:
                     feedback = {"error": "未找到有效卡片。"}
@@ -700,13 +732,10 @@ def game():
             else:
 
                 user_input = request.form.get("guess", "").strip()
-                match = filtered[filtered["name"]
-                                  .str.contains(user_input, case=False, na=False, regex=False)]
-                if match.empty:
+                guess = find_card_by_input(filtered, user_input)
+                if guess is None:
                     guess = None
                     feedback = {"error": f"未找到包含“{user_input}”的卡片。", "hints": hints}
-                else:
-                    guess = match.iloc[0]
 
             # 如果 guess 还是 None，直接跳过下面逻辑
             if guess is None:
@@ -790,6 +819,23 @@ def suggest():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
+    records = []
+    seen = set()
+    for card_id, row in db.iterrows():
+        if not card_matches_query(row, q):
+            continue
+        card_id = int(card_id)
+        if card_id in seen:
+            continue
+        seen.add(card_id)
+        records.append({
+            "id": card_id,
+            "name": matched_display_name(row, q),
+            "primary_name": row["name"],
+        })
+        if len(records) >= 50:
+            break
+    return jsonify(records)
     pool = db
     # 联想始终使用全卡池，避免当前题库限制导致无法选择其它卡作为猜测。
     df = pool[pool["name"].str.contains(q, case=False, na=False, regex=False)][["name"]].reset_index()

@@ -66,6 +66,25 @@ def pick_name(card: dict) -> str:
     return str(card.get("id", "")).strip()
 
 
+def collect_names(card: dict) -> list[str]:
+    names = []
+    for key in ("cn_name", "sc_name", "md_name", "nwbbs_n", "cnocg_n", "jp_name", "en_name"):
+        value = card.get(key)
+        if isinstance(value, str):
+            value = value.strip()
+            if value and value not in names:
+                names.append(value)
+    text = card.get("text")
+    if isinstance(text, dict):
+        for key in ("name", "title"):
+            value = text.get(key)
+            if isinstance(value, str):
+                value = value.strip()
+                if value and value not in names:
+                    names.append(value)
+    return names or [pick_name(card)]
+
+
 def fetch_remote_md5(url: str = CARDS_ZIP_MD5_URL) -> str:
     print(f"获取远端 MD5: {url}")
     response = requests.get(url, timeout=20)
@@ -170,8 +189,20 @@ def iter_card_rows(cards: dict, category_map: dict[int, int] | None = None):
         }
 
 
+def iter_card_name_rows(cards: dict):
+    for card in cards.values():
+        if not isinstance(card, dict):
+            continue
+        card_id = int_value(card.get("id"))
+        if card_id <= 0:
+            continue
+        for name in collect_names(card):
+            yield {"id": card_id, "name": name}
+
+
 def create_database(cards: dict, db_path: Path = DB_PATH, category_map: dict[int, int] | None = None) -> int:
     rows = list(iter_card_rows(cards, category_map))
+    name_rows = list(iter_card_name_rows(cards))
     if not rows:
         raise RuntimeError("没有可写入数据库的卡片数据")
 
@@ -235,6 +266,15 @@ def create_database(cards: dict, db_path: Path = DB_PATH, category_map: dict[int
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE card_names (
+                id INTEGER,
+                name TEXT,
+                PRIMARY KEY (id, name)
+            );
+            """
+        )
         cur.executemany(
             """
             INSERT OR REPLACE INTO datas
@@ -253,6 +293,15 @@ def create_database(cards: dict, db_path: Path = DB_PATH, category_map: dict[int
                 (:id, :name, :desc, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '');
             """,
             rows,
+        )
+        cur.executemany(
+            """
+            INSERT OR IGNORE INTO card_names
+                (id, name)
+            VALUES
+                (:id, :name);
+            """,
+            name_rows,
         )
         cur.executemany(
             "INSERT OR IGNORE INTO card_meta (id, first_jp_release, jp_packs) VALUES (:id, '', '[]');",
@@ -275,6 +324,8 @@ def create_database(cards: dict, db_path: Path = DB_PATH, category_map: dict[int
                 [(first_date, packs, card_id) for card_id, first_date, packs in preserved_meta],
             )
         cur.execute("CREATE INDEX idx_texts_name ON texts(name);")
+        cur.execute("CREATE INDEX idx_card_names_name ON card_names(name);")
+        cur.execute("CREATE INDEX idx_card_names_id ON card_names(id);")
         conn.commit()
         conn.close()
 

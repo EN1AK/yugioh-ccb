@@ -585,7 +585,8 @@
 
     for (const item of items.slice(0, 30)) {
       const li = document.createElement("li");
-      li.innerHTML = `<span>${item.name}</span><span class="suggest-id">#${item.id}</span>`;
+      const primary = item.primary_name && item.primary_name !== item.name ? ` / ${item.primary_name}` : "";
+      li.innerHTML = `<span>${item.name}${primary}</span><span class="suggest-id">#${item.id}</span>`;
       li.dataset.id = item.id;
 
       li.addEventListener("mouseenter", () => {

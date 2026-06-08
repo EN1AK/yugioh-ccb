@@ -129,6 +129,23 @@
     button.secondary { background: var(--gray-text); }
     button.ready { background: #166534; }
     button.danger { background: #991b1b; }
+    .surrender-form {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+    .surrender-form button {
+      width: auto;
+      padding: 9px 14px;
+      font-size: 13px;
+      background: transparent;
+      color: #991b1b;
+      border: 1px solid rgba(153, 27, 27, 0.35);
+      box-shadow: none;
+    }
+    .surrender-form button:hover {
+      background: #fee2e2;
+    }
     button:disabled {
       cursor: not-allowed;
       opacity: .55;
@@ -440,8 +457,10 @@
                   <input type="text" id="guess" name="guess" placeholder="输入卡名，联想搜索全部卡片" oninput="fetchSuggestions()" onfocus="fetchSuggestions()">
                   <input type="hidden" name="guess_id" id="guess_id" value="">
                   <button type="submit" name="action" value="guess">提交猜测</button>
-                  <button class="danger" type="submit" name="action" value="surrender">放弃本题</button>
                   <ul id="suggestions" hidden></ul>
+                </form>
+                <form class="surrender-form" method="POST" onsubmit="return confirm('确认放弃本题吗？放弃后本题不能继续猜。');">
+                  <button class="danger" type="submit" name="action" value="surrender">放弃本题</button>
                 </form>
                 <div id="preview" class="preview-tooltip"></div>
               {% endif %}
@@ -621,7 +640,8 @@
     for (const item of items.slice(0, 30)) {
       const li = document.createElement("li");
       li.dataset.id = item.id;
-      li.innerHTML = `<span>${escapeHtml(item.name)}</span><span class="suggest-id">#${item.id}</span>`;
+      const primary = item.primary_name && item.primary_name !== item.name ? ` / ${item.primary_name}` : "";
+      li.innerHTML = `<span>${escapeHtml(item.name + primary)}</span><span class="suggest-id">#${item.id}</span>`;
       li.addEventListener("mouseenter", () => showPreview(li, item));
       li.addEventListener("mouseleave", () => setTimeout(hidePreviewIfOutside, 80));
       li.addEventListener("click", () => {

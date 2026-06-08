@@ -120,12 +120,29 @@ def load_card_database(path: str = None) -> pd.DataFrame:
         )
     except sqlite3.OperationalError:
         meta = pd.DataFrame(columns=["first_jp_release", "jp_packs"])
+    try:
+        aliases = pd.read_sql_query(
+            "SELECT id, name FROM card_names",
+            conn
+        )
+    except sqlite3.OperationalError:
+        aliases = pd.DataFrame(columns=["id", "name"])
     conn.close()
 
     # 3. 合并去重并返回
     df = datas.join(texts, how="inner").join(meta, how="left").reset_index()
     df["first_jp_release"] = df["first_jp_release"].fillna("")
     df["jp_packs"] = df["jp_packs"].fillna("[]")
+    if not aliases.empty:
+        name_map = aliases.groupby("id")["name"].apply(
+            lambda values: list(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))
+        ).to_dict()
+        df["names"] = df.apply(
+            lambda row: list(dict.fromkeys([row["name"], *name_map.get(row["id"], [])])),
+            axis=1,
+        )
+    else:
+        df["names"] = df["name"].apply(lambda name: [name])
     df = (
         df
         .sort_values("id")
