@@ -4,3 +4,5 @@ __pycache__
 .venv/
 static/card/
 asset/*.bak
+asset/feedback*.jsonl
+asset/feedback_archive/

@@ -159,6 +159,45 @@ static/card/         本地卡图目录
 asset/               cards.cdb、strings.conf 等数据文件
 ```
 
+## Daily feedback sync
+
+Online feedback is stored on the server:
+
+```text
+/home/ubuntu/yugioh-ccb-main/asset/feedback.jsonl
+```
+
+Pull feedback to the local workspace once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\sync_feedback.ps1
+```
+
+Local output:
+
+```text
+asset/feedback.jsonl
+```
+
+When the local feedback file changes, the old copy is archived before overwrite:
+
+```text
+asset/feedback_archive/
+```
+
+Register a Windows daily scheduled task:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\register_feedback_sync_task.ps1 -At "09:00"
+```
+
+Check or remove the task:
+
+```powershell
+Get-ScheduledTask -TaskName YugiohCCBFeedbackSync
+Unregister-ScheduledTask -TaskName YugiohCCBFeedbackSync -Confirm:$false
+```
+
 ## TODO
 
 - 为每张卡补充更多信息，例如初次发售年份、日文卡名、收录卡包等。
